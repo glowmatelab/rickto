@@ -1,5 +1,5 @@
 # ==============================================================================
-# _thumbnails.py - Neon Detailed Thumbnail Generator (Purple Galaxy Style)
+# _thumbnails.py - Premium Thumbnail Generator
 # ==============================================================================
 
 import os
@@ -22,17 +22,26 @@ def trim_to_width(text: str, font: ImageFont.FreeTypeFont, max_w: int) -> str:
     return ellipsis
 
 
+def square_crop(img: Image.Image) -> Image.Image:
+    """Center crop image to square without stretching."""
+    w, h = img.size
+    min_side = min(w, h)
+    left = (w - min_side) // 2
+    top = (h - min_side) // 2
+    return img.crop((left, top, left + min_side, top + min_side))
+
+
 class Thumbnail:
     def __init__(self):
         try:
             self.title_font = ImageFont.truetype(
-                "Elevenyts/helpers/Raleway-Bold.ttf", 52)
+                "Elevenyts/helpers/Raleway-Bold.ttf", 50)
             self.nowplaying_font = ImageFont.truetype(
-                "Elevenyts/helpers/Raleway-Bold.ttf", 24)
+                "Elevenyts/helpers/Raleway-Bold.ttf", 20)
             self.regular_font = ImageFont.truetype(
-                "Elevenyts/helpers/Inter-Light.ttf", 24)
+                "Elevenyts/helpers/Inter-Light.ttf", 22)
             self.small_font = ImageFont.truetype(
-                "Elevenyts/helpers/Inter-Light.ttf", 20)
+                "Elevenyts/helpers/Inter-Light.ttf", 18)
         except OSError:
             self.title_font = self.nowplaying_font = \
                 self.regular_font = self.small_font = ImageFont.load_default()
@@ -61,280 +70,271 @@ class Thumbnail:
         except Exception:
             return config.DEFAULT_THUMB
 
-    def _paste_rounded_right(self, bg, img, pos, radius):
-        """Rounded corners only on right side."""
-        w, h = img.size
-        mask = Image.new("L", img.size, 255)
-        d = ImageDraw.Draw(mask)
-        # Square left corners, rounded right corners
-        d.rectangle([0, 0, w // 2, h], fill=255)
-        d.rounded_rectangle([0, 0, w, h], radius=radius, fill=255)
+    def _paste_rounded(self, bg, img, pos, radius):
+        """Paste image with rounded corners."""
+        mask = Image.new("L", img.size, 0)
+        ImageDraw.Draw(mask).rounded_rectangle(
+            (0, 0, *img.size), radius, fill=255)
         bg.paste(img, pos, mask)
 
-    def _draw_neon_line(self, draw, x1, y1, x2, y2, color, width=2, glow=True):
-        """Draw a neon glowing line."""
-        if glow:
-            # Outer glow
-            r, g, b = color
-            for i in range(4, 0, -1):
-                alpha_color = (r, g, b)
-                draw.line([(x1, y1), (x2, y2)],
-                         fill=alpha_color, width=width + i * 2)
-        draw.line([(x1, y1), (x2, y2)], fill=color, width=width)
+    def _draw_shadow(self, canvas, x1, y1, x2, y2, radius, shadow_color=(0, 0, 0), intensity=5):
+        """Draw soft shadow under a panel."""
+        draw = ImageDraw.Draw(canvas)
+        for i in range(intensity, 0, -1):
+            alpha = int(120 * (i / intensity))
+            shadow = (*shadow_color, alpha)
+            draw.rounded_rectangle(
+                [x1 + i, y1 + i, x2 + i, y2 + i],
+                radius=radius,
+                fill=shadow
+            )
+
+    def _draw_glass_panel(self, canvas, x1, y1, x2, y2, radius=24,
+                          fill=(20, 10, 40, 210), border=(255, 255, 255, 25)):
+        """Draw a frosted glass panel with border."""
+        # Shadow first
+        shadow_layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+        shadow_draw = ImageDraw.Draw(shadow_layer)
+        for i in range(18, 0, -1):
+            alpha = int(90 * (i / 18))
+            shadow_draw.rounded_rectangle(
+                [x1 + i, y1 + i, x2 + i, y2 + i],
+                radius=radius,
+                fill=(0, 0, 0, alpha)
+            )
+        canvas_comp = Image.alpha_composite(canvas, shadow_layer)
+        canvas.paste(canvas_comp, (0, 0))
+
+        # Glass fill
+        glass = Image.new("RGBA", (x2 - x1, y2 - y1), fill)
+        glass_mask = Image.new("L", glass.size, 0)
+        ImageDraw.Draw(glass_mask).rounded_rectangle(
+            (0, 0, *glass.size), radius=radius, fill=255)
+        glass.putalpha(glass_mask)
+        canvas.paste(glass, (x1, y1), glass)
+
+        # Subtle border
+        draw = ImageDraw.Draw(canvas)
+        draw.rounded_rectangle(
+            [x1, y1, x2, y2],
+            radius=radius,
+            outline=border,
+            width=1
+        )
+
+        # Top highlight — premium glass feel
+        highlight = Image.new("RGBA", (x2 - x1, 3), (255, 255, 255, 40))
+        highlight_mask = Image.new("L", highlight.size, 255)
+        canvas.paste(highlight, (x1 + radius, y1 + 1), highlight_mask)
 
     def _generate_sync(self, temp: str, output: str, song: Track, size=(1280, 720)) -> str:
         try:
             W, H = size  # 1280 x 720
 
             # ─────────────────────────────────────────
-            # 1. BASE CANVAS — pure dark background
+            # 1. BACKGROUND — blurred dark
             # ─────────────────────────────────────────
-            canvas = Image.new("RGBA", (W, H), (5, 0, 15, 255))
-
-            # Subtle radial purple glow in center-right
-            glow_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-            glow_draw = ImageDraw.Draw(glow_layer)
-            for i in range(300, 0, -1):
-                alpha = int(40 * (1 - i / 300))
-                glow_draw.ellipse(
-                    [W // 2 + 100 - i, H // 2 - i,
-                     W // 2 + 100 + i, H // 2 + i],
-                    fill=(100, 20, 200, alpha)
-                )
-            canvas = Image.alpha_composite(canvas, glow_layer)
-
-            draw = ImageDraw.Draw(canvas)
-
-            # ─────────────────────────────────────────
-            # 2. LEFT SIDE — YouTube Thumbnail
-            # ─────────────────────────────────────────
-            thumb_w = 520
-            thumb_h = H  # Full height
-
             with Image.open(temp) as raw:
-                thumb = raw.resize((thumb_w, thumb_h)).convert("RGBA")
+                bg = raw.resize((W, H)).convert("RGBA")
 
-            # Slight blur on edges
-            thumb_blurred = thumb.filter(ImageFilter.GaussianBlur(2))
+            bg = bg.filter(ImageFilter.GaussianBlur(30))
 
-            # Paste with rounded right corners
-            self._paste_rounded_right(canvas, thumb_blurred, (0, 0), radius=40)
+            # Dark overlay
+            overlay = Image.new("RGBA", (W, H), (5, 2, 15, 195))
+            bg = Image.alpha_composite(bg, overlay)
 
-            # Dark gradient fade on right edge of thumbnail
-            fade = Image.new("RGBA", (120, H), (0, 0, 0, 0))
-            fade_draw = ImageDraw.Draw(fade)
-            for i in range(120):
-                alpha = int(255 * (i / 120))
-                fade_draw.line([(i, 0), (i, H)], fill=(5, 0, 15, alpha))
-            canvas.paste(fade, (thumb_w - 120, 0), fade)
-
-            # Neon purple glow on right edge of thumbnail
-            draw_canvas = ImageDraw.Draw(canvas)
-            for i in range(8, 0, -1):
-                alpha = int(180 * (i / 8))
-                draw_canvas.line(
-                    [(thumb_w - i, 0), (thumb_w - i, H)],
-                    fill=(180, 60, 255),
-                    width=1
+            # Subtle dark vignette
+            vignette = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+            vdraw = ImageDraw.Draw(vignette)
+            for i in range(80):
+                alpha = int(140 * (i / 80))
+                vdraw.rectangle(
+                    [i, i, W - i, H - i],
+                    outline=(0, 0, 0, alpha)
                 )
+            bg = Image.alpha_composite(bg, vignette)
 
-            # Bright neon divider line
-            draw_canvas.line(
-                [(thumb_w, 0), (thumb_w, H)],
-                fill=(200, 80, 255),
-                width=3
+            # ─────────────────────────────────────────
+            # 2. THUMBNAIL GLASS PANEL — left
+            # ─────────────────────────────────────────
+            thumb_size = 220
+            thumb_panel_pad = 20
+
+            tp_x1 = 60
+            tp_y1 = (H - thumb_size - thumb_panel_pad * 2) // 2
+            tp_x2 = tp_x1 + thumb_size + thumb_panel_pad * 2
+            tp_y2 = tp_y1 + thumb_size + thumb_panel_pad * 2
+
+            self._draw_glass_panel(
+                bg,
+                tp_x1, tp_y1, tp_x2, tp_y2,
+                radius=28,
+                fill=(18, 8, 38, 220),
+                border=(255, 255, 255, 30)
+            )
+
+            # Square crop + resize thumbnail
+            with Image.open(temp) as raw_thumb:
+                cropped = square_crop(raw_thumb.convert("RGBA"))
+                thumb = cropped.resize((thumb_size, thumb_size))
+
+            self._paste_rounded(
+                bg, thumb,
+                (tp_x1 + thumb_panel_pad, tp_y1 + thumb_panel_pad),
+                radius=18
             )
 
             # ─────────────────────────────────────────
-            # 3. RIGHT SIDE — Info Panel
+            # 3. INFO GLASS PANEL — right
             # ─────────────────────────────────────────
-            right_x = thumb_w + 50
-            right_max_w = W - right_x - 40
+            ip_x1 = tp_x2 + 40
+            ip_y1 = tp_y1
+            ip_x2 = W - 60
+            ip_y2 = tp_y2
+
+            self._draw_glass_panel(
+                bg,
+                ip_x1, ip_y1, ip_x2, ip_y2,
+                radius=28,
+                fill=(18, 8, 38, 220),
+                border=(255, 255, 255, 30)
+            )
+
+            draw = ImageDraw.Draw(bg)
+            info_x = ip_x1 + 35
+            info_max_w = ip_x2 - info_x - 30
+            info_y = ip_y1 + 35
 
             # ── NOW PLAYING ──
-            np_y = 80
-            # Neon pink dot
-            draw_canvas.ellipse(
-                [right_x, np_y + 6, right_x + 14, np_y + 20],
-                fill=(255, 80, 180)
+            # Small dot
+            dot_x = info_x
+            dot_y = info_y + 6
+            draw.ellipse(
+                [dot_x, dot_y, dot_x + 10, dot_y + 10],
+                fill=(180, 80, 255)
             )
-            # Glow around dot
-            for i in range(6, 0, -1):
-                draw_canvas.ellipse(
-                    [right_x - i, np_y + 6 - i,
-                     right_x + 14 + i, np_y + 20 + i],
-                    outline=(255, 80, 180),
-                    width=1
-                )
-            draw_canvas.text(
-                (right_x + 24, np_y),
+            draw.text(
+                (info_x + 18, info_y),
                 "NOW PLAYING",
                 font=self.nowplaying_font,
-                fill=(255, 80, 180)
+                fill=(180, 80, 255)
             )
 
             # ── SONG TITLE ──
-            title_y = np_y + 55
+            title_y = info_y + 38
             title = re.sub(r"\W+", " ", song.title).title()
-            title_trimmed = trim_to_width(title, self.title_font, right_max_w)
+            title_trimmed = trim_to_width(
+                title, self.title_font, info_max_w)
 
-            # Title shadow/glow
-            for dx, dy in [(-2, -2), (2, -2), (-2, 2), (2, 2)]:
-                draw_canvas.text(
-                    (right_x + dx, title_y + dy),
+            # Subtle glow behind title
+            for dx, dy in [(-1, 1), (1, 1), (0, 2)]:
+                draw.text(
+                    (info_x + dx, title_y + dy),
                     title_trimmed,
                     font=self.title_font,
-                    fill=(140, 40, 220)
+                    fill=(100, 40, 160)
                 )
-            # Title main
-            draw_canvas.text(
-                (right_x, title_y),
+            draw.text(
+                (info_x, title_y),
                 title_trimmed,
                 font=self.title_font,
-                fill=(255, 255, 255)
+                fill=(245, 240, 255)
             )
 
-            # ── NEON ACCENT LINE UNDER TITLE ──
-            accent_y = title_y + self.title_font.size + 10
-            for i in range(5, 0, -1):
-                draw_canvas.line(
-                    [(right_x, accent_y + i),
-                     (right_x + 320, accent_y + i)],
-                    fill=(180, 60, 255),
-                    width=1
-                )
-            draw_canvas.line(
-                [(right_x, accent_y),
-                 (right_x + 320, accent_y)],
-                fill=(220, 100, 255),
-                width=3
+            # ── THIN ACCENT LINE ──
+            accent_y = title_y + self.title_font.size + 12
+            draw.rounded_rectangle(
+                [info_x, accent_y, info_x + 260, accent_y + 2],
+                radius=1,
+                fill=(160, 80, 255)
             )
 
             # ── VIEWS ──
-            views_y = accent_y + 22
+            views_y = accent_y + 18
             views = song.view_count or "Unknown"
-            draw_canvas.text(
-                (right_x, views_y),
-                f"YouTube  •  {views}",
+            draw.text(
+                (info_x, views_y),
+                f"YouTube  ·  {views}",
                 font=self.regular_font,
-                fill=(180, 140, 230)
+                fill=(170, 150, 210)
             )
 
             # ── PROGRESS BAR ──
-            bar_x1 = right_x
-            bar_x2 = W - 50
-            bar_y = views_y + 70
-            bar_h = 8
+            bar_x1 = info_x
+            bar_x2 = ip_x2 - 35
+            bar_y = views_y + 55
+            bar_h = 5
             bar_w = bar_x2 - bar_x1
             fill_w = int(bar_w * 0.38)
 
             # Track bg
-            draw_canvas.rounded_rectangle(
+            draw.rounded_rectangle(
                 [bar_x1, bar_y, bar_x2, bar_y + bar_h],
-                radius=4,
-                fill=(40, 10, 70)
+                radius=3,
+                fill=(50, 25, 80)
             )
-
-            # Neon filled portion
-            draw_canvas.rounded_rectangle(
+            # Filled
+            draw.rounded_rectangle(
                 [bar_x1, bar_y, bar_x1 + fill_w, bar_y + bar_h],
-                radius=4,
-                fill=(180, 60, 255)
+                radius=3,
+                fill=(160, 80, 255)
             )
-
-            # Glow on filled bar
-            for i in range(4, 0, -1):
-                draw_canvas.rounded_rectangle(
-                    [bar_x1, bar_y - i,
-                     bar_x1 + fill_w, bar_y + bar_h + i],
-                    radius=4,
-                    outline=(180, 60, 255),
-                    width=1
-                )
-
-            # Neon dot at progress
+            # Dot
             dot_x = bar_x1 + fill_w
             dot_y = bar_y + bar_h // 2
-            for r in range(12, 4, -2):
-                alpha_fill = (180, 60, 255)
-                draw_canvas.ellipse(
-                    [dot_x - r, dot_y - r, dot_x + r, dot_y + r],
-                    fill=alpha_fill
-                )
-            draw_canvas.ellipse(
-                [dot_x - 6, dot_y - 6, dot_x + 6, dot_y + 6],
-                fill=(230, 160, 255)
+            draw.ellipse(
+                [dot_x - 7, dot_y - 7, dot_x + 7, dot_y + 7],
+                fill=(200, 140, 255)
             )
 
             # Time labels
-            time_y = bar_y + bar_h + 12
-            draw_canvas.text(
+            time_y = bar_y + bar_h + 10
+            draw.text(
                 (bar_x1, time_y),
                 "00:00",
                 font=self.small_font,
-                fill=(160, 110, 210)
+                fill=(140, 110, 190)
             )
             duration = getattr(song, 'duration', '00:00')
             dur_w = self.small_font.getlength(duration)
-            draw_canvas.text(
+            draw.text(
                 (bar_x2 - dur_w, time_y),
                 duration,
                 font=self.small_font,
-                fill=(160, 110, 210)
+                fill=(140, 110, 190)
             )
 
             # ── REQUESTED BY ──
-            req_y = time_y + 55
+            req_y = time_y + 35
             requested_by = getattr(song, 'requested_by', None)
             if requested_by:
-                name = getattr(requested_by, 'first_name', '') or str(requested_by)
-
-                # Neon arrow
-                draw_canvas.text(
-                    (right_x, req_y),
+                name = getattr(
+                    requested_by, 'first_name', '') or str(requested_by)
+                draw.text(
+                    (info_x, req_y),
                     "▸",
                     font=self.small_font,
-                    fill=(255, 80, 180)
+                    fill=(160, 80, 255)
                 )
-                # Glow on arrow
-                draw_canvas.text(
-                    (right_x, req_y),
-                    "▸",
-                    font=self.small_font,
-                    fill=(255, 80, 180)
-                )
-                draw_canvas.text(
-                    (right_x + 24, req_y),
+                draw.text(
+                    (info_x + 20, req_y),
                     "Requested by",
                     font=self.small_font,
-                    fill=(160, 110, 210)
+                    fill=(150, 120, 200)
                 )
-                # Name in neon pink
-                name_x = right_x + 24 + self.small_font.getlength("Requested by  ")
-                draw_canvas.text(
+                name_x = info_x + 20 + \
+                    self.small_font.getlength("Requested by  ")
+                draw.text(
                     (name_x, req_y),
                     name,
                     font=self.small_font,
-                    fill=(255, 120, 200)
+                    fill=(220, 190, 255)
                 )
-
-            # ── BOTTOM NEON LINE ──
-            for i in range(4, 0, -1):
-                draw_canvas.line(
-                    [(0, H - i), (W, H - i)],
-                    fill=(180, 60, 255),
-                    width=1
-                )
-            draw_canvas.line(
-                [(0, H - 4), (W, H - 4)],
-                fill=(220, 100, 255),
-                width=3
-            )
 
             # ─────────────────────────────────────────
             # 4. SAVE
             # ─────────────────────────────────────────
-            final = canvas.convert("RGB")
+            final = bg.convert("RGB")
             final.save(output, quality=95)
 
             try:
