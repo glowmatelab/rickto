@@ -1,5 +1,5 @@
 # ==============================================================================
-# _thumbnails.py - Circle Layout Premium Thumbnail (Fixed)
+# _thumbnails.py - Circle 3D Overflow Premium Thumbnail
 # ==============================================================================
 
 import os
@@ -85,20 +85,20 @@ class Thumbnail:
         bg.paste(img_resized, (x, y), mask)
 
     def _draw_glass_box(self, canvas, x1, y1, x2, y2, radius=36):
-        # Shadow
+        # Multi layer shadow
         shadow = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
         sd = ImageDraw.Draw(shadow)
-        for i in range(24, 0, -1):
-            alpha = int(110 * (i / 24))
+        for i in range(28, 0, -1):
+            alpha = int(130 * (i / 28))
             sd.rounded_rectangle(
-                [x1 + i, y1 + i//2, x2 + i, y2 + i//2],
+                [x1 + i, y1 + i // 2, x2 + i, y2 + i // 2],
                 radius=radius, fill=(0, 0, 0, alpha)
             )
         merged = Image.alpha_composite(canvas, shadow)
         canvas.paste(merged, (0, 0))
 
-        # Fill
-        glass = Image.new("RGBA", (x2 - x1, y2 - y1), (14, 5, 30, 230))
+        # Glass fill
+        glass = Image.new("RGBA", (x2 - x1, y2 - y1), (14, 5, 30, 235))
         mask = Image.new("L", glass.size, 0)
         ImageDraw.Draw(mask).rounded_rectangle(
             (0, 0, *glass.size), radius=radius, fill=255)
@@ -110,39 +110,44 @@ class Thumbnail:
         draw.rounded_rectangle(
             [x1, y1, x2, y2],
             radius=radius,
-            outline=(255, 255, 255, 25),
+            outline=(255, 255, 255, 28),
             width=1
         )
         # Purple inner border
         draw.rounded_rectangle(
             [x1 + 2, y1 + 2, x2 - 2, y2 - 2],
             radius=radius - 2,
-            outline=(140, 60, 240, 35),
+            outline=(140, 60, 240, 40),
             width=1
         )
         # Top shine
         hl_w = x2 - x1 - radius * 2
         if hl_w > 0:
-            shine = Image.new("RGBA", (hl_w, 2), (255, 255, 255, 40))
+            shine = Image.new("RGBA", (hl_w, 2), (255, 255, 255, 42))
             canvas.paste(shine, (x1 + radius, y1 + 3), shine)
+        # Bottom glow
+        draw.rounded_rectangle(
+            [x1 + 50, y2 - 3, x2 - 50, y2 - 1],
+            radius=1, fill=(140, 60, 240, 55)
+        )
 
     def _draw_progress_bar(self, draw, x1, y, x2, fill_ratio=0.38):
         bar_h = 6
         fill_w = int((x2 - x1) * fill_ratio)
-        # Track
         draw.rounded_rectangle(
             [x1, y, x2, y + bar_h], radius=3, fill=(50, 25, 85))
-        # Fill
         draw.rounded_rectangle(
             [x1, y, x1 + fill_w, y + bar_h], radius=3, fill=(180, 100, 255))
         draw.rounded_rectangle(
             [x1, y, x1 + fill_w // 2, y + bar_h], radius=3, fill=(210, 140, 255))
-        # Dot
         dot_x = x1 + fill_w
         dot_y = y + bar_h // 2
-        draw.ellipse([dot_x - 10, dot_y - 10, dot_x + 10, dot_y + 10], fill=(100, 40, 180))
-        draw.ellipse([dot_x - 7, dot_y - 7, dot_x + 7, dot_y + 7], fill=(180, 100, 255))
-        draw.ellipse([dot_x - 4, dot_y - 4, dot_x + 4, dot_y + 4], fill=(230, 180, 255))
+        draw.ellipse(
+            [dot_x - 10, dot_y - 10, dot_x + 10, dot_y + 10], fill=(100, 40, 180))
+        draw.ellipse(
+            [dot_x - 7, dot_y - 7, dot_x + 7, dot_y + 7], fill=(180, 100, 255))
+        draw.ellipse(
+            [dot_x - 4, dot_y - 4, dot_x + 4, dot_y + 4], fill=(230, 180, 255))
 
     def _wrap_title(self, title, font, max_w):
         words = title.split()
@@ -169,7 +174,7 @@ class Thumbnail:
                 bg = raw.resize((W, H)).convert("RGBA")
             bg = bg.filter(ImageFilter.GaussianBlur(28))
 
-            overlay = Image.new("RGBA", (W, H), (0, 0, 0, 120))
+            overlay = Image.new("RGBA", (W, H), (0, 0, 0, 125))
             bg = Image.alpha_composite(bg, overlay)
 
             vig = Image.new("RGBA", (W, H), (0, 0, 0, 0))
@@ -179,14 +184,82 @@ class Thumbnail:
                 vd.rectangle([i, i, W - i, H - i], outline=(0, 0, 0, alpha))
             bg = Image.alpha_composite(bg, vig)
 
-            # ── GLASS BOX ──
-            bx1, by1 = 50, 40
-            bx2, by2 = W - 50, H - 40
-            self._draw_glass_box(bg, bx1, by1, bx2, by2, radius=36)
+            # ── CIRCLE DIMENSIONS ──
+            circle_r = 240
+            circle_cx = 280          # Left side — overflow left of box
+            circle_cy = H // 2
+
+            # ── GLASS BOX — starts after circle center ──
+            bx1 = circle_cx - 20     # Box starts slightly before circle center
+            by1 = 45
+            bx2 = W - 45
+            by2 = H - 45
+
+            self._draw_glass_box(bg, bx1, by1, bx2, by2, radius=38)
+
+            # ── 3D SHADOW UNDER CIRCLE ──
+            shadow_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+            sd = ImageDraw.Draw(shadow_layer)
+            for i in range(35, 0, -1):
+                alpha = int(100 * (i / 35))
+                sd.ellipse(
+                    [circle_cx - circle_r - i + 15,
+                     circle_cy - circle_r - i + 15,
+                     circle_cx + circle_r + i + 15,
+                     circle_cy + circle_r + i + 15],
+                    fill=(0, 0, 0, alpha)
+                )
+            bg = Image.alpha_composite(bg, shadow_layer)
 
             draw = ImageDraw.Draw(bg)
 
-            # ── GALAXY BOTS — top right inside box ──
+            # ── GLOW RINGS ──
+            for i in range(30, 0, -5):
+                alpha = int(60 * (i / 30))
+                draw.ellipse(
+                    [circle_cx - circle_r - i, circle_cy - circle_r - i,
+                     circle_cx + circle_r + i, circle_cy + circle_r + i],
+                    outline=(160, 80, 255, alpha), width=2
+                )
+
+            # ── OUTER BORDER — thick purple ──
+            draw.ellipse(
+                [circle_cx - circle_r - 14, circle_cy - circle_r - 14,
+                 circle_cx + circle_r + 14, circle_cy + circle_r + 14],
+                outline=(120, 50, 220), width=14
+            )
+            # Mid border
+            draw.ellipse(
+                [circle_cx - circle_r - 5, circle_cy - circle_r - 5,
+                 circle_cx + circle_r + 5, circle_cy + circle_r + 5],
+                outline=(180, 110, 255), width=4
+            )
+            # Inner bright border
+            draw.ellipse(
+                [circle_cx - circle_r, circle_cy - circle_r,
+                 circle_cx + circle_r, circle_cy + circle_r],
+                outline=(220, 170, 255), width=2
+            )
+
+            # ── PASTE CIRCLE THUMB ──
+            with Image.open(temp) as raw_thumb:
+                cropped = square_crop(raw_thumb.convert("RGBA"))
+            self._paste_circle(bg, cropped, (circle_cx, circle_cy), circle_r)
+
+            # Redraw borders on top of thumb
+            draw = ImageDraw.Draw(bg)
+            draw.ellipse(
+                [circle_cx - circle_r - 5, circle_cy - circle_r - 5,
+                 circle_cx + circle_r + 5, circle_cy + circle_r + 5],
+                outline=(180, 110, 255), width=4
+            )
+            draw.ellipse(
+                [circle_cx - circle_r, circle_cy - circle_r,
+                 circle_cx + circle_r, circle_cy + circle_r],
+                outline=(220, 170, 255), width=2
+            )
+
+            # ── GALAXY BOTS — top right ──
             brand = "Galaxy Bots"
             bw = self.brand_font.getlength(brand)
             draw.text(
@@ -194,65 +267,24 @@ class Thumbnail:
                 brand, font=self.brand_font, fill=(160, 100, 230)
             )
 
-            # ── CIRCLE THUMBNAIL ──
-            box_h = by2 - by1
-            circle_r = min(220, box_h // 2 - 40)
-            circle_cx = bx1 + 50 + circle_r
-            circle_cy = by1 + box_h // 2
-
-            # Glow rings
-            draw = ImageDraw.Draw(bg)
-            for i in range(28, 0, -5):
-                alpha = int(55 * (i / 28))
-                draw.ellipse(
-                    [circle_cx - circle_r - i, circle_cy - circle_r - i,
-                     circle_cx + circle_r + i, circle_cy + circle_r + i],
-                    outline=(160, 80, 255, alpha), width=2
-                )
-
-            # Outer thick border
-            draw.ellipse(
-                [circle_cx - circle_r - 14, circle_cy - circle_r - 14,
-                 circle_cx + circle_r + 14, circle_cy + circle_r + 14],
-                outline=(130, 55, 235), width=12
-            )
-            draw.ellipse(
-                [circle_cx - circle_r - 4, circle_cy - circle_r - 4,
-                 circle_cx + circle_r + 4, circle_cy + circle_r + 4],
-                outline=(200, 140, 255), width=3
-            )
-
-            with Image.open(temp) as raw_thumb:
-                cropped = square_crop(raw_thumb.convert("RGBA"))
-            self._paste_circle(bg, cropped, (circle_cx, circle_cy), circle_r)
-
-            # Redraw inner border on top
-            draw = ImageDraw.Draw(bg)
-            draw.ellipse(
-                [circle_cx - circle_r, circle_cy - circle_r,
-                 circle_cx + circle_r, circle_cy + circle_r],
-                outline=(200, 140, 255), width=3
-            )
-
-            # ── RIGHT SIDE — all content inside box ──
-            info_x = circle_cx + circle_r + 70
+            # ── RIGHT SIDE INFO ──
+            info_x = circle_cx + circle_r // 2 + 60
             info_max_w = bx2 - info_x - 40
 
-            # Calculate total content height to vertically center
-            # title(2 lines) + artist + bar + time + controls
+            # Vertical center calculation
             line_h = self.title_font_sm.size + 8
             total_h = (
-                line_h * 2 +    # title 2 lines
-                16 +            # gap
-                self.artist_font.size +  # artist
-                28 +            # gap
-                6 +             # bar
-                14 +            # gap
-                self.time_font.size +  # time
-                28 +            # gap
-                self.ctrl_font.size + 16  # controls
+                line_h * 2 +
+                14 +
+                self.artist_font.size +
+                26 +
+                6 +
+                12 +
+                self.time_font.size +
+                26 +
+                self.ctrl_font.size + 16
             )
-            start_y = by1 + (box_h - total_h) // 2
+            start_y = by1 + ((by2 - by1) - total_h) // 2
 
             # ── TITLE ──
             title_raw = re.sub(r"\W+", " ", song.title).title()
@@ -262,15 +294,19 @@ class Thumbnail:
             for i, line in enumerate(lines):
                 ly = title_y + i * line_h
                 for dx, dy in [(-2, 2), (2, 2)]:
-                    draw.text((info_x + dx, ly + dy), line,
-                              font=self.title_font_sm, fill=(60, 20, 110))
-                draw.text((info_x, ly), line,
-                          font=self.title_font_sm, fill=(255, 255, 255))
+                    draw.text(
+                        (info_x + dx, ly + dy), line,
+                        font=self.title_font_sm, fill=(55, 18, 100)
+                    )
+                draw.text(
+                    (info_x, ly), line,
+                    font=self.title_font_sm, fill=(255, 255, 255)
+                )
 
             title_end_y = title_y + len(lines) * line_h
 
             # ── ARTIST | VIEWS ──
-            artist_y = title_end_y + 16
+            artist_y = title_end_y + 14
             requested_by = getattr(song, 'requested_by', None)
             artist_name = (
                 getattr(requested_by, 'first_name', '') or str(requested_by)
@@ -278,28 +314,41 @@ class Thumbnail:
             views = song.view_count or "Unknown"
             av_text = trim_to_width(
                 f"{artist_name}  |  {views}", self.artist_font, info_max_w)
-            draw.text((info_x, artist_y), av_text,
-                      font=self.artist_font, fill=(200, 175, 240))
+            draw.text(
+                (info_x, artist_y), av_text,
+                font=self.artist_font, fill=(200, 175, 240)
+            )
+
+            # ── ACCENT LINE ──
+            acc_y = artist_y + self.artist_font.size + 12
+            draw.rounded_rectangle(
+                [info_x, acc_y, info_x + 240, acc_y + 2],
+                radius=1, fill=(140, 70, 240)
+            )
 
             # ── PROGRESS BAR ──
-            bar_y = artist_y + self.artist_font.size + 28
+            bar_y = acc_y + 18
             bar_x1 = info_x
             bar_x2 = bx2 - 40
             self._draw_progress_bar(draw, bar_x1, bar_y, bar_x2)
 
             # ── TIME ──
-            time_y = bar_y + 6 + 14
-            draw.text((bar_x1, time_y), "00:00",
-                      font=self.time_font, fill=(190, 165, 230))
+            time_y = bar_y + 6 + 12
+            draw.text(
+                (bar_x1, time_y), "00:00",
+                font=self.time_font, fill=(190, 165, 230)
+            )
             duration = getattr(song, 'duration', '0:00')
             dur_w = self.time_font.getlength(duration)
-            draw.text((bar_x2 - dur_w, time_y), duration,
-                      font=self.time_font, fill=(190, 165, 230))
+            draw.text(
+                (bar_x2 - dur_w, time_y), duration,
+                font=self.time_font, fill=(190, 165, 230)
+            )
 
-            # ── CONTROLS — inside box ──
-            ctrl_y = time_y + self.time_font.size + 28
+            # ── CONTROLS ──
+            ctrl_y = time_y + self.time_font.size + 26
             ctrl_cx = (info_x + bar_x2) // 2
-            spacing = int((bar_x2 - info_x) // 5)
+            spacing = (bar_x2 - info_x) // 5
 
             controls = [
                 ("⇄", (170, 140, 220)),
@@ -318,14 +367,16 @@ class Thumbnail:
 
             for (symbol, color), x in zip(controls, positions):
                 if symbol == "▶":
-                    r = self.ctrl_font.size // 2 + 10
+                    r = self.ctrl_font.size // 2 + 12
                     draw.ellipse(
-                        [x - r, ctrl_y - 8, x + r, ctrl_y + self.ctrl_font.size + 8],
-                        fill=(130, 55, 225)
+                        [x - r, ctrl_y - 8,
+                         x + r, ctrl_y + self.ctrl_font.size + 8],
+                        fill=(120, 50, 215)
                     )
                     draw.ellipse(
-                        [x - r + 3, ctrl_y - 5, x + r - 3, ctrl_y + self.ctrl_font.size + 5],
-                        fill=(155, 75, 250)
+                        [x - r + 4, ctrl_y - 4,
+                         x + r - 4, ctrl_y + self.ctrl_font.size + 4],
+                        fill=(150, 70, 245)
                     )
                 sw = int(self.ctrl_font.getlength(symbol))
                 draw.text(
