@@ -1,5 +1,5 @@
 # ==============================================================================
-# _thumbnails.py - Fixed Ultra-Premium Glassmorphism Edition
+# _thumbnails.py - 3D Circle Layout Premium (FIXED & ENHANCED)
 # ==============================================================================
 
 import os
@@ -30,14 +30,15 @@ def square_crop(img: Image.Image) -> Image.Image:
 class Thumbnail:
     def __init__(self):
         try:
-            self.brand_font = ImageFont.truetype("Elevenyts/helpers/Raleway-Bold.ttf", 24)
-            self.title_font = ImageFont.truetype("Elevenyts/helpers/Raleway-Bold.ttf", 60)
+            self.brand_font = ImageFont.truetype("Elevenyts/helpers/Raleway-Bold.ttf", 26)
+            self.title_font = ImageFont.truetype("Elevenyts/helpers/Raleway-Bold.ttf", 62)
+            self.title_font_sm = ImageFont.truetype("Elevenyts/helpers/Raleway-Bold.ttf", 50)
             self.artist_font = ImageFont.truetype("Elevenyts/helpers/Raleway-Bold.ttf", 34)
-            self.time_font = ImageFont.truetype("Elevenyts/helpers/Inter-Light.ttf", 24)
-            self.ctrl_font = ImageFont.truetype("Elevenyts/helpers/Raleway-Bold.ttf", 55)
+            self.time_font = ImageFont.truetype("Elevenyts/helpers/Inter-Light.ttf", 26)
+            self.ctrl_font = ImageFont.truetype("Elevenyts/helpers/Raleway-Bold.ttf", 48)
         except OSError:
-            self.brand_font = self.title_font = self.artist_font = \
-                self.time_font = self.ctrl_font = ImageFont.load_default()
+            self.brand_font = self.title_font = self.title_font_sm = \
+                self.artist_font = self.time_font = self.ctrl_font = ImageFont.load_default()
 
     async def save_thumb(self, output_path: str, url: str) -> str:
         async with aiohttp.ClientSession() as session:
@@ -47,36 +48,30 @@ class Thumbnail:
                         f.write(await resp.read())
         return output_path
 
-    # --- YE METHOD MISSING THA ---
     async def generate(self, song: Track, size=(1280, 720)) -> str:
         try:
             if not os.path.exists("cache"): os.makedirs("cache")
-            temp = f"cache/temp_{song.id}.jpg"
-            output = f"cache/{song.id}_final.png"
-            
+            temp, output = f"cache/temp_{song.id}.jpg", f"cache/{song.id}_3d.png"
             if os.path.exists(output): return output
-            
             await self.save_thumb(temp, song.thumbnail)
-            
-            return await asyncio.get_event_loop().run_in_executor(
-                None, self._generate_sync, temp, output, song, size
-            )
-        except Exception as e:
-            print(f"Thumbnail Error: {e}")
+            return await asyncio.get_event_loop().run_in_executor(None, self._generate_sync, temp, output, song, size)
+        except Exception:
             return config.DEFAULT_THUMB
 
-    def _get_dominant_color(self, img):
-        small_img = img.resize((1, 1))
-        color = small_img.getpixel((0, 0))
-        return color[:3]
+    def _draw_progress_bar(self, draw, x1, y, x2, fill_ratio=0.45):
+        bar_h = 8
+        fill_w = int((x2 - x1) * fill_ratio)
+        draw.rounded_rectangle([x1, y, x2, y + bar_h], radius=5, fill=(255, 255, 255, 30)) # Track
+        draw.rounded_rectangle([x1, y, x1 + fill_w, y + bar_h], radius=5, fill=(180, 100, 255)) # Fill
+        dot_x, dot_y = x1 + fill_w, y + bar_h // 2
+        draw.ellipse([dot_x - 10, dot_y - 10, dot_x + 10, dot_y + 10], fill=(220, 160, 255)) # Knob
 
     def _wrap_title(self, title, font, max_w):
         words = title.split()
         lines, current = [], ""
         for word in words:
             test = (current + " " + word).strip()
-            if font.getlength(test) <= max_w:
-                current = test
+            if font.getlength(test) <= max_w: current = test
             else:
                 if current: lines.append(current)
                 current = word
@@ -87,75 +82,84 @@ class Thumbnail:
         try:
             W, H = size
             with Image.open(temp) as raw:
-                raw_rgba = raw.convert("RGBA")
-                dom_color = self._get_dominant_color(raw_rgba)
-                accent = dom_color if sum(dom_color) > 150 else (180, 100, 255)
-                bg = raw.resize((W, H)).filter(ImageFilter.GaussianBlur(15))
+                # Slight blur (kam kar diya gaya hai)
+                bg = raw.resize((W, H)).convert("RGBA").filter(ImageFilter.GaussianBlur(15))
 
-            overlay = Image.new("RGBA", (W, H), (10, 10, 15, 140))
+            # Full Canvas Dark Overlay
+            overlay = Image.new("RGBA", (W, H), (0, 0, 0, 100))
             bg = Image.alpha_composite(bg, overlay)
 
-            # --- GLASS BOX ---
-            bx1, by1, bx2, by2 = 80, 100, W - 80, H - 100
+            # --- 3D FLOATING BOX WITH SHADOW ---
+            # Box dimensions
+            bx1, by1, bx2, by2 = 100, 120, W - 100, H - 120
             
-            # Shadow
+            # Draw Shadow (Blurry black rectangle)
             shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
             sd = ImageDraw.Draw(shadow)
-            sd.rounded_rectangle([bx1+10, by1+10, bx2+10, by2+10], radius=45, fill=(0, 0, 0, 180))
-            bg = Image.alpha_composite(bg, shadow.filter(ImageFilter.GaussianBlur(20)))
+            sd.rounded_rectangle([bx1+10, by1+10, bx2+10, by2+10], radius=40, fill=(0, 0, 0, 150))
+            shadow = shadow.filter(ImageFilter.GaussianBlur(20))
+            bg = Image.alpha_composite(bg, shadow)
 
+            # Main Floating Box
             draw = ImageDraw.Draw(bg)
-            draw.rounded_rectangle([bx1, by1, bx2, by2], radius=45, fill=(25, 25, 35, 170), outline=(255, 255, 255, 35), width=2)
+            draw.rounded_rectangle([bx1, by1, bx2, by2], radius=40, fill=(20, 20, 25, 180), outline=(255, 255, 255, 30), width=2)
 
-            # --- ART CIRCLE ---
-            circle_r, cx, cy = 215, bx1 + 235, H // 2
-            draw.ellipse([cx-circle_r-10, cy-circle_r-10, cx+circle_r+10, cy+circle_r+10], outline=accent, width=5)
+            # --- CIRCLE THUMBNAIL ---
+            circle_r, cx, cy = 210, bx1 + 220, H // 2
+            # Border Glow
+            draw.ellipse([cx-circle_r-8, cy-circle_r-8, cx+circle_r+8, cy+circle_r+8], outline=(180, 100, 255), width=6)
             
-            with Image.open(temp) as thumb:
-                img_t = square_crop(thumb.convert("RGBA")).resize((circle_r*2, circle_r*2), Image.LANCZOS)
+            with Image.open(temp) as raw_thumb:
+                img_t = square_crop(raw_thumb.convert("RGBA")).resize((circle_r*2, circle_r*2), Image.LANCZOS)
                 mask = Image.new("L", (circle_r*2, circle_r*2), 0)
                 ImageDraw.Draw(mask).ellipse((0, 0, circle_r*2, circle_r*2), fill=255)
                 bg.paste(img_t, (cx - circle_r, cy - circle_r), mask)
 
-            # --- TEXT INFO ---
-            info_x = cx + circle_r + 65
-            info_max_w = bx2 - info_x - 40
+            # --- INFO SECTION ---
+            info_x = cx + circle_r + 60
+            info_max_w = bx2 - info_x - 50
             
-            draw.text((bx2 - 180, by1 + 35), "Galaxy Bots", font=self.brand_font, fill=(accent[0], accent[1], accent[2], 200))
+            # Brand
+            draw.text((bx2 - 180, by1 + 30), "Galaxy Bots", font=self.brand_font, fill=(180, 120, 255))
 
+            # Title & Artist
             title_raw = re.sub(r"\W+", " ", song.title).title()
-            lines = self._wrap_title(title_raw, self.title_font, info_max_w)
-            ty = by1 + 75
+            lines = self._wrap_title(title_raw, self.title_font_sm, info_max_w)
+            ty = by1 + 80
             for i, line in enumerate(lines):
-                draw.text((info_x, ty + i*70), line, font=self.title_font, fill=(255, 255, 255))
+                draw.text((info_x, ty + i*60), line, font=self.title_font_sm, fill=(255, 255, 255))
             
-            artist_y = ty + (len(lines) * 75) + 10
-            draw.text((info_x, artist_y), f"YouTube | {song.view_count or 'N/A'}", font=self.artist_font, fill=(200, 200, 220))
+            artist_y = ty + (len(lines) * 65) + 10
+            views = song.view_count or "Unknown"
+            draw.text((info_x, artist_y), f"YouTube | {views}", font=self.artist_font, fill=(180, 160, 220))
 
-            # --- PROGRESS BAR ---
-            bar_y = artist_y + 85
-            bar_x2 = bx2 - 60
-            draw.rounded_rectangle([info_x, bar_y, bar_x2, bar_y+8], radius=4, fill=(255, 255, 255, 30))
-            
-            fill_w = int((bar_x2 - info_x) * 0.42)
-            draw.rounded_rectangle([info_x, bar_y, info_x + fill_w, bar_y+8], radius=4, fill=accent)
-            draw.ellipse([info_x + fill_w - 10, bar_y - 6, info_x + fill_w + 10, bar_y + 14], fill=accent)
+            # Progress Bar
+            bar_y = artist_y + 80
+            self._draw_progress_bar(draw, info_x, bar_y, bx2 - 60)
 
-            # --- CONTROLS ---
-            ctrl_y = by2 - 95
-            mid_x = (info_x + bar_x2) // 2
-            
-            # Play Circle
-            draw.ellipse([mid_x-40, ctrl_y-10, mid_x+40, ctrl_y+70], fill=(accent[0], accent[1], accent[2], 60), outline=accent, width=2)
-            draw.text((mid_x-14, ctrl_y+5), "II", font=self.ctrl_font, fill=(255, 255, 255))
-            
-            draw.text((mid_x-130, ctrl_y+8), "⏮", font=self.ctrl_font, fill=(255, 255, 255, 180))
-            draw.text((mid_x+90, ctrl_y+8), "⏭", font=self.ctrl_font, fill=(255, 255, 255, 180))
+            # Time
+            duration = getattr(song, 'duration', '3:45')
+            draw.text((info_x, bar_y + 25), "01:24", font=self.time_font, fill=(150, 130, 200))
+            draw.text((bx2 - 60 - self.time_font.getlength(duration), bar_y + 25), duration, font=self.time_font, fill=(150, 130, 200))
 
+            # --- CONTROLS (Play & Pause Hybrid) ---
+            ctrl_cy = by2 - 80
+            ctrl_cx = (info_x + bx2 - 60) // 2
+            
+            # Big Play Button with Shadow
+            draw.ellipse([ctrl_cx-45, ctrl_cy-45, ctrl_cx+45, ctrl_cy+45], fill=(180, 100, 255))
+            # Play Triangle symbol (Manual draw for safety)
+            draw.polygon([(ctrl_cx-10, ctrl_cy-15), (ctrl_cx-10, ctrl_cy+15), (ctrl_cx+18, ctrl_cy)], fill=(255, 255, 255))
+            
+            # Skip Icons
+            draw.text((ctrl_cx - 150, ctrl_cy - 25), "⏮", font=self.ctrl_font, fill=(200, 180, 255))
+            draw.text((ctrl_cx + 100, ctrl_cy - 25), "⏭", font=self.ctrl_font, fill=(200, 180, 255))
+
+            # Final Save
             bg.convert("RGB").save(output, quality=95)
             if os.path.exists(temp): os.remove(temp)
             return output
 
         except Exception as e:
-            print(f"Sync Error: {e}")
+            print(f"Error: {e}")
             return config.DEFAULT_THUMB
