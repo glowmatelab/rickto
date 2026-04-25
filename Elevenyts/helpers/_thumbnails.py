@@ -1,5 +1,5 @@
 # ==============================================================================
-# _thumbnails.py - Circle Layout Premium Thumbnail (FIXED)
+# _thumbnails.py - 3D Circle Layout Premium (FIXED & ENHANCED)
 # ==============================================================================
 
 import os
@@ -11,7 +11,6 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from Elevenyts import config
 from Elevenyts.helpers import Track
 
-
 def trim_to_width(text: str, font: ImageFont.FreeTypeFont, max_w: int) -> str:
     ellipsis = "…"
     if font.getlength(text) <= max_w:
@@ -21,14 +20,12 @@ def trim_to_width(text: str, font: ImageFont.FreeTypeFont, max_w: int) -> str:
             return text[:i] + ellipsis
     return ellipsis
 
-
 def square_crop(img: Image.Image) -> Image.Image:
     w, h = img.size
     min_side = min(w, h)
     left = (w - min_side) // 2
     top = (h - min_side) // 2
     return img.crop((left, top, left + min_side, top + min_side))
-
 
 class Thumbnail:
     def __init__(self):
@@ -37,13 +34,11 @@ class Thumbnail:
             self.title_font = ImageFont.truetype("Elevenyts/helpers/Raleway-Bold.ttf", 62)
             self.title_font_sm = ImageFont.truetype("Elevenyts/helpers/Raleway-Bold.ttf", 50)
             self.artist_font = ImageFont.truetype("Elevenyts/helpers/Raleway-Bold.ttf", 34)
-            self.time_font = ImageFont.truetype("Elevenyts/helpers/Inter-Light.ttf", 28)
-            self.small_font = ImageFont.truetype("Elevenyts/helpers/Inter-Light.ttf", 22)
-            self.ctrl_font = ImageFont.truetype("Elevenyts/helpers/Raleway-Bold.ttf", 44)
+            self.time_font = ImageFont.truetype("Elevenyts/helpers/Inter-Light.ttf", 26)
+            self.ctrl_font = ImageFont.truetype("Elevenyts/helpers/Raleway-Bold.ttf", 48)
         except OSError:
             self.brand_font = self.title_font = self.title_font_sm = \
-                self.artist_font = self.time_font = self.small_font = \
-                self.ctrl_font = ImageFont.load_default()
+                self.artist_font = self.time_font = self.ctrl_font = ImageFont.load_default()
 
     async def save_thumb(self, output_path: str, url: str) -> str:
         async with aiohttp.ClientSession() as session:
@@ -55,52 +50,28 @@ class Thumbnail:
 
     async def generate(self, song: Track, size=(1280, 720)) -> str:
         try:
-            if not os.path.exists("cache"):
-                os.makedirs("cache")
-            temp = f"cache/temp_{song.id}.jpg"
-            output = f"cache/{song.id}_modern.png"
-
-            if os.path.exists(output):
-                return output
-
+            if not os.path.exists("cache"): os.makedirs("cache")
+            temp, output = f"cache/temp_{song.id}.jpg", f"cache/{song.id}_3d.png"
+            if os.path.exists(output): return output
             await self.save_thumb(temp, song.thumbnail)
-
-            return await asyncio.get_event_loop().run_in_executor(
-                None, self._generate_sync, temp, output, song, size
-            )
+            return await asyncio.get_event_loop().run_in_executor(None, self._generate_sync, temp, output, song, size)
         except Exception:
             return config.DEFAULT_THUMB
 
-    def _paste_circle(self, bg, img, center, radius):
-        size = radius * 2
-        img_resized = img.resize((size, size), Image.LANCZOS)
-        mask = Image.new("L", (size, size), 0)
-        ImageDraw.Draw(mask).ellipse((0, 0, size, size), fill=255)
-        x = center[0] - radius
-        y = center[1] - radius
-        bg.paste(img_resized, (x, y), mask)
-
-    def _draw_progress_bar(self, draw, x1, y, x2, fill_ratio=0.38):
-        bar_h = 7
-        actual_w = x2 - x1
-        fill_w = int(actual_w * fill_ratio)
-
-        # Track (Background)
-        draw.rounded_rectangle([x1, y, x2, y + bar_h], radius=4, fill=(255, 255, 255, 40))
-        # Fill (Main Color)
-        draw.rounded_rectangle([x1, y, x1 + fill_w, y + bar_h], radius=4, fill=(180, 100, 255))
-        
-        # Glow Dot
+    def _draw_progress_bar(self, draw, x1, y, x2, fill_ratio=0.45):
+        bar_h = 8
+        fill_w = int((x2 - x1) * fill_ratio)
+        draw.rounded_rectangle([x1, y, x2, y + bar_h], radius=5, fill=(255, 255, 255, 30)) # Track
+        draw.rounded_rectangle([x1, y, x1 + fill_w, y + bar_h], radius=5, fill=(180, 100, 255)) # Fill
         dot_x, dot_y = x1 + fill_w, y + bar_h // 2
-        draw.ellipse([dot_x - 10, dot_y - 10, dot_x + 10, dot_y + 10], fill=(200, 140, 255))
+        draw.ellipse([dot_x - 10, dot_y - 10, dot_x + 10, dot_y + 10], fill=(220, 160, 255)) # Knob
 
     def _wrap_title(self, title, font, max_w):
         words = title.split()
         lines, current = [], ""
         for word in words:
             test = (current + " " + word).strip()
-            if font.getlength(test) <= max_w:
-                current = test
+            if font.getlength(test) <= max_w: current = test
             else:
                 if current: lines.append(current)
                 current = word
@@ -111,89 +82,84 @@ class Thumbnail:
         try:
             W, H = size
             with Image.open(temp) as raw:
-                bg = raw.resize((W, H)).convert("RGBA")
+                # Slight blur (kam kar diya gaya hai)
+                bg = raw.resize((W, H)).convert("RGBA").filter(ImageFilter.GaussianBlur(15))
 
-            bg = bg.filter(ImageFilter.GaussianBlur(28))
-            overlay = Image.new("RGBA", (W, H), (0, 0, 0, 130))
+            # Full Canvas Dark Overlay
+            overlay = Image.new("RGBA", (W, H), (0, 0, 0, 100))
             bg = Image.alpha_composite(bg, overlay)
 
-            # Vignette
-            vig = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-            vd = ImageDraw.Draw(vig)
-            for i in range(120):
-                alpha = int(200 * (i / 120))
-                vd.rectangle([i, i, W - i, H - i], outline=(0, 0, 0, alpha))
-            bg = Image.alpha_composite(bg, vig)
-
-            draw = ImageDraw.Draw(bg)
-            circle_r, circle_cx, circle_cy = 240, 320, H // 2
-
-            # Glow & Border
-            for i in range(20, 0, -5):
-                draw.ellipse([circle_cx-circle_r-i, circle_cy-circle_r-i, circle_cx+circle_r+i, circle_cy+circle_r+i], outline=(160, 80, 255, int(60*(i/20))), width=2)
+            # --- 3D FLOATING BOX WITH SHADOW ---
+            # Box dimensions
+            bx1, by1, bx2, by2 = 100, 120, W - 100, H - 120
             
-            draw.ellipse([circle_cx-circle_r-12, circle_cy-circle_r-12, circle_cx+circle_r+12, circle_cy+circle_r+12], outline=(140, 60, 240), width=10)
+            # Draw Shadow (Blurry black rectangle)
+            shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+            sd = ImageDraw.Draw(shadow)
+            sd.rounded_rectangle([bx1+10, by1+10, bx2+10, by2+10], radius=40, fill=(0, 0, 0, 150))
+            shadow = shadow.filter(ImageFilter.GaussianBlur(20))
+            bg = Image.alpha_composite(bg, shadow)
 
+            # Main Floating Box
+            draw = ImageDraw.Draw(bg)
+            draw.rounded_rectangle([bx1, by1, bx2, by2], radius=40, fill=(20, 20, 25, 180), outline=(255, 255, 255, 30), width=2)
+
+            # --- CIRCLE THUMBNAIL ---
+            circle_r, cx, cy = 210, bx1 + 220, H // 2
+            # Border Glow
+            draw.ellipse([cx-circle_r-8, cy-circle_r-8, cx+circle_r+8, cy+circle_r+8], outline=(180, 100, 255), width=6)
+            
             with Image.open(temp) as raw_thumb:
-                cropped = square_crop(raw_thumb.convert("RGBA"))
-                self._paste_circle(bg, cropped, (circle_cx, circle_cy), circle_r)
+                img_t = square_crop(raw_thumb.convert("RGBA")).resize((circle_r*2, circle_r*2), Image.LANCZOS)
+                mask = Image.new("L", (circle_r*2, circle_r*2), 0)
+                ImageDraw.Draw(mask).ellipse((0, 0, circle_r*2, circle_r*2), fill=255)
+                bg.paste(img_t, (cx - circle_r, cy - circle_r), mask)
 
-            # ─────────────────────────────────────────
-            # RIGHT SIDE INFO - LAYOUT FIX
-            # ─────────────────────────────────────────
-            info_x = circle_cx + circle_r + 70
-            bar_x2 = W - 80  # Bound to stay inside the box
-            info_max_w = bar_x2 - info_x
-
+            # --- INFO SECTION ---
+            info_x = cx + circle_r + 60
+            info_max_w = bx2 - info_x - 50
+            
             # Brand
-            brand_w = self.brand_font.getlength("Galaxy Bots")
-            draw.text((W - brand_w - 50, 36), "Galaxy Bots", font=self.brand_font, fill=(160, 100, 230))
+            draw.text((bx2 - 180, by1 + 30), "Galaxy Bots", font=self.brand_font, fill=(180, 120, 255))
 
-            # Title Wrap
+            # Title & Artist
             title_raw = re.sub(r"\W+", " ", song.title).title()
             lines = self._wrap_title(title_raw, self.title_font_sm, info_max_w)
-            title_y = H // 2 - 180
+            ty = by1 + 80
             for i, line in enumerate(lines):
-                draw.text((info_x, title_y + i*60), line, font=self.title_font_sm, fill=(255, 255, 255))
+                draw.text((info_x, ty + i*60), line, font=self.title_font_sm, fill=(255, 255, 255))
             
-            # Artist & Views
-            artist_y = title_y + (len(lines) * 65)
-            requested_by = getattr(song, 'requested_by', None)
-            artist_name = getattr(requested_by, 'first_name', 'YouTube') if requested_by else "YouTube"
+            artist_y = ty + (len(lines) * 65) + 10
             views = song.view_count or "Unknown"
-            draw.text((info_x, artist_y), f"{artist_name}  |  {views}", font=self.artist_font, fill=(210, 185, 245))
+            draw.text((info_x, artist_y), f"YouTube | {views}", font=self.artist_font, fill=(180, 160, 220))
 
-            # Progress Bar (Fixed Width)
+            # Progress Bar
             bar_y = artist_y + 80
-            self._draw_progress_bar(draw, info_x, bar_y, bar_x2)
+            self._draw_progress_bar(draw, info_x, bar_y, bx2 - 60)
 
-            # Time Labels
-            time_y = bar_y + 25
-            duration = getattr(song, 'duration', '0:00')
-            draw.text((info_x, time_y), "00:00", font=self.time_font, fill=(200, 180, 235))
-            dur_w = self.time_font.getlength(duration)
-            draw.text((bar_x2 - dur_w, time_y), duration, font=self.time_font, fill=(200, 180, 235))
+            # Time
+            duration = getattr(song, 'duration', '3:45')
+            draw.text((info_x, bar_y + 25), "01:24", font=self.time_font, fill=(150, 130, 200))
+            draw.text((bx2 - 60 - self.time_font.getlength(duration), bar_y + 25), duration, font=self.time_font, fill=(150, 130, 200))
 
-            # ─────────────────────────────────────────
-            # CONTROLS SECTION (Play/Pause/Skip)
-            # ─────────────────────────────────────────
-            ctrl_y = time_y + 80
-            ctrl_cx = (info_x + bar_x2) // 2
+            # --- CONTROLS (Play & Pause Hybrid) ---
+            ctrl_cy = by2 - 80
+            ctrl_cx = (info_x + bx2 - 60) // 2
             
-            # Main Play Button Circle
-            draw.ellipse([ctrl_cx-40, ctrl_y-10, ctrl_cx+40, ctrl_y+70], fill=(160, 80, 255))
-            # Pause Symbol (II)
-            draw.text((ctrl_cx-12, ctrl_y+5), "II", font=self.ctrl_font, fill=(255, 255, 255))
+            # Big Play Button with Shadow
+            draw.ellipse([ctrl_cx-45, ctrl_cy-45, ctrl_cx+45, ctrl_cy+45], fill=(180, 100, 255))
+            # Play Triangle symbol (Manual draw for safety)
+            draw.polygon([(ctrl_cx-10, ctrl_cy-15), (ctrl_cx-10, ctrl_cy+15), (ctrl_cx+18, ctrl_cy)], fill=(255, 255, 255))
             
-            # Skip Buttons
-            draw.text((ctrl_cx-130, ctrl_y+8), "⏮", font=self.ctrl_font, fill=(200, 180, 235))
-            draw.text((ctrl_cx+90, ctrl_y+8), "⏭", font=self.ctrl_font, fill=(200, 180, 235))
+            # Skip Icons
+            draw.text((ctrl_cx - 150, ctrl_cy - 25), "⏮", font=self.ctrl_font, fill=(200, 180, 255))
+            draw.text((ctrl_cx + 100, ctrl_cy - 25), "⏭", font=self.ctrl_font, fill=(200, 180, 255))
 
-            # Finalize
-            final = bg.convert("RGB")
-            final.save(output, quality=95)
+            # Final Save
+            bg.convert("RGB").save(output, quality=95)
             if os.path.exists(temp): os.remove(temp)
             return output
 
-        except Exception:
+        except Exception as e:
+            print(f"Error: {e}")
             return config.DEFAULT_THUMB
