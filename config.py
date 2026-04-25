@@ -1,6 +1,7 @@
 from os import getenv
 from typing import List
 from dotenv import load_dotenv
+import random
 
 # Load environment variables from .env file (create one from sample.env)
 load_dotenv()
@@ -78,16 +79,32 @@ class Config:
 
         # ============ IMAGE URLS ============
         # URLs for various bot images
-        self.DEFAULT_THUMB: str = getenv(
-            "DEFAULT_THUMB",
-            "https://i.pinimg.com/550x/fc/48/c6/fc48c6e50f85375fdaadb987b9aaca09.jpg"  # Default thumbnail
-        )
-        self.PING_IMG: str = getenv(
-            "PING_IMG", "https://i.pinimg.com/550x/fc/48/c6/fc48c6e50f85375fdaadb987b9aaca09.jpg")    # Ping command image
-        self.START_IMG: str = getenv(
-            "START_IMG", "https://i.pinimg.com/550x/fc/48/c6/fc48c6e50f85375fdaadb987b9aaca09.jpg")  # Start command image
-        self.RADIO_IMG: str = getenv(
-            "RADIO_IMG", "https://i.pinimg.com/550x/fc/48/c6/fc48c6e50f85375fdaadb987b9aaca09.jpg")    # Radio command image
+        # ============ IMAGE URLS ============
+        _DEFAULT_THUMBS = [
+            "https://i.pinimg.com/550x/fc/48/c6/fc48c6e50f85375fdaadb987b9aaca09.jpg",
+            "https://i.pinimg.com/550x/fc/48/c6/fc48c6e50f85375fdaadb987b9aaca09.jpg",
+        ]
+        _PING_IMGS = [
+            "https://i.pinimg.com/550x/fc/48/c6/fc48c6e50f85375fdaadb987b9aaca09.jpg",
+            "https://i.pinimg.com/550x/fc/48/c6/fc48c6e50f85375fdaadb987b9aaca09.jpg",
+        ]
+        _START_IMGS = [
+            "https://i.pinimg.com/550x/fc/48/c6/fc48c6e50f85375fdaadb987b9aaca09.jpg",
+            "https://img.freepik.com/premium-photo/anime-girl-listening-music-while-sitting-table-with-drink-generative-ai_733139-40138.jpg",
+            "https://motionbgs.com/media/5785/goth-anime-girl.jpg",
+            "https://wallpaperbat.com/img/888697.jpg",
+            "https://image.cdn2.seaart.ai/2023-07-19/46636105711685/3d49c1baa56ecf4223342600635dd79d5d7764cd_high.webp",
+            "https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/83c3ac45-0de3-4f59-8dfe-a2379b3a3400/djp0q30-25e8b9ec-6fe2-4246-adbd-b51b6aafb88a.png/v1/fill/w_1182,h_676,q_70,strp/_second_charge__by_evlsound_djp0q30-pre.jpg?token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1cm46YXBwOjdlMGQxODg5ODIyNjQzNzNhNWYwZDQxNWVhMGQyNmUwIiwiaXNzIjoidXJuOmFwcDo3ZTBkMTg4OTgyMjY0MzczYTVmMGQ0MTVlYTBkMjZlMCIsIm9iaiI6W1t7ImhlaWdodCI6Ijw9NzMyIiwicGF0aCI6IlwvZlwvODNjM2FjNDUtMGRlMy00ZjU5LThkZmUtYTIzNzliM2EzNDAwXC9kanAwcTMwLTI1ZThiOWVjLTZmZTItNDI0Ni1hZGJkLWI1MWI2YWFmYjg4YS5wbmciLCJ3aWR0aCI6Ijw9MTI4MCJ9XV0sImF1ZCI6WyJ1cm46c2VydmljZTppbWFnZS5vcGVyYXRpb25zIl19.TxMk8t3sbhfVyHHw0mSVQa3gM44_WAerlfgclzx8ZsA",
+            "https://moewalls.com/wp-content/uploads/2024/09/anime-girl-watching-sunset-pixel-thumb.jpg",
+        ]
+        _RADIO_IMGS = [
+            "https://i.pinimg.com/550x/fc/48/c6/fc48c6e50f85375fdaadb987b9aaca09.jpg",
+            "https://i.pinimg.com/550x/fc/48/c6/fc48c6e50f85375fdaadb987b9aaca09.jpg",
+        ]
+        self.DEFAULT_THUMB: str = getenv("DEFAULT_THUMB", random.choice(_DEFAULT_THUMBS))
+        self.PING_IMG: str = getenv("PING_IMG", random.choice(_PING_IMGS))
+        self.START_IMG: str = getenv("START_IMG", random.choice(_START_IMGS))
+        self.RADIO_IMG: str = getenv("RADIO_IMG", random.choice(_RADIO_IMGS))
 
         # ============ MODERATION ============
         # List of usernames to exclude from admin mentions
