@@ -1,3 +1,5 @@
+import random
+
 from pyrogram import enums, errors, filters, types
 
 from Elevenyts import app, config, db, lang
@@ -8,7 +10,6 @@ from Elevenyts.helpers import buttons, utils
 @lang.language()
 async def _help(_, m: types.Message):
     """Handle /help command in private chats - shows help menu with image."""
-    # Auto-delete command message
     try:
         await m.delete()
     except Exception:
@@ -16,13 +17,12 @@ async def _help(_, m: types.Message):
     
     try:
         await m.reply_photo(
-            photo=config.START_IMG,  # Use same image as start command
+            photo=random.choice(config.START_IMGS),
             caption=m.lang["help_menu"],
             reply_markup=buttons.help_markup(m.lang),
             quote=True,
         )
     except Exception:
-        # Fallback to text if photo fails
         await m.reply_text(
             text=m.lang["help_menu"],
             reply_markup=buttons.help_markup(m.lang),
@@ -41,29 +41,23 @@ async def start(_, message: types.Message):
     - Adds new users to database
     - Sends log to logger group for new users
     """
-    # Auto-delete command message in group chats
     if message.chat.type != enums.ChatType.PRIVATE:
         try:
             await message.delete()
         except Exception:
             pass
     
-    # Skip if message from channel or anonymous admin
     if not message.from_user:
         return
 
-    # Check if user is blacklisted
     if message.from_user.id in app.bl_users and message.from_user.id not in db.notified:
         return await message.reply_text(message.lang["bl_user_notify"])
 
-    # If /start help, show help menu
     if len(message.command) > 1 and message.command[1] == "help":
         return await _help(_, message)
 
-    # Determine if chat is private or group
     private = message.chat.type == enums.ChatType.PRIVATE
 
-    # Choose appropriate welcome message
     _text = (
         message.lang["start_pm"].format(message.from_user.first_name, app.name)
         if private
@@ -73,26 +67,22 @@ async def start(_, message: types.Message):
     key = buttons.start_key(message.lang, private)
     try:
         await message.reply_photo(
-            photo=config.START_IMG,
+            photo=random.choice(config.START_IMGS),
             caption=_text,
             reply_markup=key,
             quote=not private,
         )
     except errors.ChatSendPhotosForbidden:
-        # If photos are not allowed, send text only
         await message.reply_text(
             text=_text,
             reply_markup=key,
             quote=not private,
         )
 
-    # For private chats, add user to database if new
     if private:
         if await db.is_user(message.from_user.id):
-            return  # User already exists, no need to add
-        # Log new user to logger group
+            return
         await utils.send_log(message)
-        # Add user to database
         return await db.add_user(message.from_user.id)
 
 
@@ -101,19 +91,13 @@ async def start(_, message: types.Message):
 async def settings(_, message: types.Message):
     """
     Handle /playmode or /settings command - show group settings.
-
-    Displays:
-    - Play mode (everyone or admin only)
-    - Current language
-    - Options to change settings
     """
-    # Auto-delete command message
     try:
         await message.delete()
     except Exception:
         pass
     
-    admin_only = await db.get_play_mode(message.chat.id)  # Get play mode setting
+    admin_only = await db.get_play_mode(message.chat.id)
     _language = "en"
     await message.reply_text(
         text=message.lang["start_settings"].format(message.chat.title),
@@ -129,18 +113,12 @@ async def settings(_, message: types.Message):
 async def _new_member(_, message: types.Message):
     """
     Handle new member events - detect when bot is added to groups.
-
-    - Leaves non-supergroup chats
-    - Adds new groups to database
     """
-    # Only work in supergroups (not basic groups)
     if message.chat.type != enums.ChatType.SUPERGROUP:
         return await message.chat.leave()
 
-    # Check each new member
     for member in message.new_chat_members:
-        if member.id == app.id:  # Bot itself was added
+        if member.id == app.id:
             if await db.is_chat(message.chat.id):
-                return  # Chat already in database
-            # Add chat to database (log is sent from new_chat.py with photo)
+                return
             await db.add_chat(message.chat.id)
