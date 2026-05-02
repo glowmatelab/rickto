@@ -155,12 +155,13 @@ class Inline:
                 self.ikb(
                     text=lang["add_me"],
                     url=f"https://t.me/{app.username}?startgroup=true",
+                    style=enums.ButtonStyle.SUCCESS, # Isse "Add Me" Green ho jayega
                 )
             ],
             [self.ikb(text=lang["help"], callback_data="help")],
             [
-                self.ikb(text=lang["support"], url=config.SUPPORT_CHAT),
-                self.ikb(text=lang["channel"], url=config.SUPPORT_CHANNEL),
+                self.ikb(text=lang["support"], url=config.SUPPORT_CHAT, style=enums.ButtonStyle.PRIMARY), # Blue
+                self.ikb(text=lang["channel"], url=config.SUPPORT_CHANNEL, style=enums.ButtonStyle.PRIMARY), # Blue
             ],
         ]
         return self.ikm(rows)
