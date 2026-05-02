@@ -1,7 +1,5 @@
 from pyrogram import enums, types
-
 from Elevenyts import app, config, lang
-
 
 class Inline:
     def __init__(self):
@@ -20,12 +18,14 @@ class Inline:
     ) -> types.InlineKeyboardMarkup:
         keyboard = []
         if status:
+            # Status button ko Red (DANGER) kiya
             keyboard.append(
-                [self.ikb(text=status, callback_data=f"controls status {chat_id}")]
+                [self.ikb(text=status, callback_data=f"controls status {chat_id}", style=enums.ButtonStyle.PRIMARY)]
             )
         elif timer:
+            # Timer button ko Red (DANGER) kiya
             keyboard.append(
-                [self.ikb(text=timer, callback_data=f"controls status {chat_id}")]
+                [self.ikb(text=timer, callback_data=f"controls status {chat_id}", style=enums.ButtonStyle.PRIMARY)]
             )
 
         if not remove:
@@ -33,9 +33,9 @@ class Inline:
             keyboard.append(
                 [
                     self.ikb(text="▷", callback_data=f"controls resume {chat_id}"),
-                    self.ikb(text="II", callback_data=f"controls pause {chat_id}", style=enums.ButtonStyle.PRIMARY),
+                    self.ikb(text="II", callback_data=f"controls pause {chat_id}"), # style=enums.ButtonStyle.PRIMARY),
                     self.ikb(text="↻", callback_data=f"controls replay {chat_id}"),
-                    self.ikb(text="‣‣I", callback_data=f"controls skip {chat_id}", style=enums.ButtonStyle.PRIMARY),
+                    self.ikb(text="‣‣I", callback_data=f"controls skip {chat_id}"), # style=enums.ButtonStyle.PRIMARY),
                     self.ikb(text="▢", callback_data=f"controls stop {chat_id}"),
                 ]
             )
@@ -91,16 +91,21 @@ class Inline:
         return self.ikm(rows)
 
     def ping_markup(self, text: str) -> types.InlineKeyboardMarkup:
-        return self.ikm([
-            [
-                self.ikb(text="📢 Channel", url=config.SUPPORT_CHANNEL),
-                self.ikb(text="🆘 Support", url=config.SUPPORT_CHAT),
-            ],
-            [
-                self.ikb(text="➕ Add Me to Your Group", url=f"https://t.me/{app.username}?startgroup=true"),
-            ]
-        ])
-
+            return self.ikm([
+                [
+                    # Channel aur Support ko Blue (PRIMARY) color diya
+                    self.ikb(text="📢 Channel", url=config.SUPPORT_CHANNEL, style=enums.ButtonStyle.PRIMARY),
+                    self.ikb(text="🆘 Support", url=config.SUPPORT_CHAT, style=enums.ButtonStyle.PRIMARY),
+                ],
+                [
+                    # Add Me button ko Green (SUCCESS) color diya
+                    self.ikb(
+                        text="➕ Add Me to Your Group", 
+                        url=f"https://t.me/{app.username}?startgroup=true",
+                        style=enums.ButtonStyle.SUCCESS
+                    ),
+                ]
+            ])
     def play_queued(
         self, chat_id: int, item_id: str, _text: str
     ) -> types.InlineKeyboardMarkup:
