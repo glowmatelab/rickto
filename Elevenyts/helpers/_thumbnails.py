@@ -1,5 +1,5 @@
 # ==============================================================================
-# Elevenyts - Final Apple Music Style (Blur BG + Views + Symbols)
+# Final Code - Real Blur BG + Views (No Antavion Branding)
 # ==============================================================================
 
 import os
@@ -8,7 +8,7 @@ import aiohttp
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from Elevenyts import config
 
-# Fonts - Inka path check kar lena helpers folder mein
+# Fonts path
 FONT_BOLD = "Elevenyts/helpers/Raleway-Bold.ttf"
 FONT_REG = "Elevenyts/helpers/Inter-Light.ttf"
 
@@ -51,16 +51,18 @@ class Thumbnail:
     def _generate_sync(self, temp, output, song, size):
         W, H = size
         try:
-            # 1. Background: Full Blur Image + Dark Overlay for Text Contrast
+            # 1. Background: Real Thumbnail Blur
             with Image.open(temp) as raw:
+                # Thumbnail ko resize karke heavy blur apply karna
                 bg = raw.convert("RGBA").resize((W, H))
-                bg = bg.filter(ImageFilter.GaussianBlur(100)) # Deep Blur
-                overlay = Image.new("RGBA", (W, H), (0, 0, 0, 165)) # Darker tint
+                bg = bg.filter(ImageFilter.GaussianBlur(100)) 
+                # Halka sa dark overlay taaki text aur artwork pop kare
+                overlay = Image.new("RGBA", (W, H), (0, 0, 0, 160))
                 bg = Image.alpha_composite(bg, overlay)
 
             draw = ImageDraw.Draw(bg)
 
-            # 2. Left Side: Rounded Square Artwork
+            # 2. Left Side: Rounded Artwork
             margin = 100
             thumb_size = H - (margin * 2)
             with Image.open(temp) as raw_art:
@@ -73,7 +75,7 @@ class Thumbnail:
             ImageDraw.Draw(mask).rounded_rectangle((0, 0, *art.size), 45, fill=255)
             bg.paste(art, (margin, margin), mask)
 
-            # 3. Text Info Section
+            # 3. Right Side Info (Views Only)
             right_x = margin + thumb_size + 85
             right_w = W - right_x - 80
             center_x = right_x + (right_w // 2)
@@ -82,11 +84,11 @@ class Thumbnail:
             clean_title = song.title[:28] + "..." if len(song.title) > 28 else song.title
             draw.text((right_x, 130), clean_title, font=self.title_font, fill=(255, 255, 255))
             
-            # Views (Antavion Removed)
+            # Subtitle: Views and YouTube (Antavion Removed)
             views = getattr(song, 'view_count', 'Unknown')
             draw.text((right_x, 195), f"{views} views • YouTube", font=self.artist_font, fill=(180, 180, 180))
 
-            # 4. Progress Bar & "MUSIC" Badge
+            # 4. Progress Bar & MUSIC Badge
             bar_y = 320
             draw.rounded_rectangle([right_x, bar_y, right_x + right_w, bar_y + 7], radius=4, fill=(255, 255, 255, 60))
             draw.rounded_rectangle([right_x, bar_y, right_x + (right_w * 0.4), bar_y + 7], radius=4, fill=(255, 255, 255, 220))
@@ -101,18 +103,14 @@ class Thumbnail:
             dur = getattr(song, 'duration', '4:30')
             draw.text((right_x + right_w - 70, bar_y + 25), f"-{dur}", font=self.time_font, fill=(160, 160, 160))
 
-            # 5. DRAWING SYMBOLS (No Fonts Needed - Geometric Shapes)
+            # 5. Drawing Symbols (Manual Shapes)
             ctrl_y = 450
-            # Pause Button
+            # Pause
             draw.rectangle([center_x - 15, ctrl_y, center_x - 3, ctrl_y + 50], fill=(255, 255, 255))
             draw.rectangle([center_x + 3, ctrl_y, center_x + 15, ctrl_y + 50], fill=(255, 255, 255))
 
-            # Rewind & Forward Triangles
             def draw_tri(x, y, size, direction='left'):
-                if direction == 'left':
-                    pts = [(x, y + size/2), (x + size, y), (x + size, y + size)]
-                else:
-                    pts = [(x + size, y + size/2), (x, y), (x, y + size)]
+                pts = [(x, y + size/2), (x + size, y), (x + size, y + size)] if direction == 'left' else [(x + size, y + size/2), (x, y), (x, y + size)]
                 draw.polygon(pts, fill=(255, 255, 255))
 
             draw_tri(center_x - 160, ctrl_y + 10, 30, 'left')
@@ -123,21 +121,18 @@ class Thumbnail:
             # 6. Volume Slider
             vol_y = 590
             vol_bar_w = right_w * 0.75
-            vx_start = center_x - (vol_bar_w // 2)
-            draw.rounded_rectangle([vx_start, vol_y, vx_start + vol_bar_w, vol_y + 5], radius=3, fill=(255, 255, 255, 50))
-            draw.rounded_rectangle([vx_start, vol_y, vx_start + (vol_bar_w * 0.7), vol_y + 5], radius=3, fill=(255, 255, 255, 180))
-            # Vol Circle Indicator
-            dot_x = vx_start + (vol_bar_w * 0.7)
-            draw.ellipse([dot_x - 8, vol_y - 6, dot_x + 8, vol_y + 10], fill=(255, 255, 255))
+            vx = center_x - (vol_bar_w // 2)
+            draw.rounded_rectangle([vx, vol_y, vx + vol_bar_w, vol_y + 5], radius=3, fill=(255, 255, 255, 50))
+            draw.rounded_rectangle([vx, vol_y, vx + (vol_bar_w * 0.7), vol_y + 5], radius=3, fill=(255, 255, 255, 180))
+            draw.ellipse([vx + (vol_bar_w * 0.7) - 8, vol_y - 6, vx + (vol_bar_w * 0.7) + 8, vol_y + 10], fill=(255, 255, 255))
 
-            # 7. Bottom UI Symbols
+            # 7. Bottom Icons
             lx, ly = right_x + 60, 670
             draw.rounded_rectangle([lx, ly, lx+35, ly+25], radius=5, outline=(255, 255, 255, 150), width=2)
             qx, qy = right_x + right_w - 90, 670
             for i in range(3):
                 draw.line([qx, qy + (i*8), qx+30, qy + (i*8)], fill=(255, 255, 255, 150), width=3)
 
-            # Final Save
             final = bg.convert("RGB")
             final.save(output, quality=95)
             if os.path.exists(temp): os.remove(temp)
