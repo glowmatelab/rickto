@@ -11,7 +11,7 @@ async def _activevc(_, m: types.Message):
         await m.delete()
     except Exception:
         pass
-    
+
     if not db.active_calls:
         return await m.reply_text(m.lang["vc_empty"])
 
@@ -24,10 +24,28 @@ async def _activevc(_, m: types.Message):
     for i, chat in enumerate(db.active_calls):
         playing = queue.get_current(chat)
         if playing:
-            text += f"\n{i+1}. <code>{chat}</code>\n    ➜ {playing.title[:25]}"
+            # Group name fetch karo
+            try:
+                chat_info = await app.get_chat(chat)
+                chat_name = chat_info.title or "Unknown"
+            except Exception:
+                chat_name = "Unknown"
+
+            text += (
+                f"\n<blockquote>"
+                f"<b>{i+1}. {chat_name}</b>\n"
+                f"   🆔 <code>{chat}</code>\n"
+                f"   🎵 {playing.title[:30]}"
+                f"</blockquote>"
+            )
+
+    if not text:
+        return await sent.edit_text(m.lang["vc_empty"])
 
     if len(text) < 4000:
-        return await sent.edit_text(m.lang["vc_list"] + text)
+        return await sent.edit_text(
+            f"<b>🎙 ᴀᴄᴛɪᴠᴇ ꜱᴛʀᴇᴀᴍꜱ — {len(db.active_calls)}</b>\n" + text
+        )
 
     with open("activevc.txt", "w") as f:
         f.write(text)
