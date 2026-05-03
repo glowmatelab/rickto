@@ -1,12 +1,11 @@
 import os
 from pyrogram import filters, types
-from Elevenyts import app, db, lang, queue
+from Elevenyts import app, db, lang
 
 
 @app.on_message(filters.command(["ac", "activevc"]) & app.sudo_filter)
 @lang.language()
 async def _activevc(_, m: types.Message):
-    # Auto-delete command message
     try:
         await m.delete()
     except Exception:
@@ -22,22 +21,18 @@ async def _activevc(_, m: types.Message):
     text = ""
 
     for i, chat in enumerate(db.active_calls):
-        playing = queue.get_current(chat)
-        if playing:
-            # Group name fetch karo
-            try:
-                chat_info = await app.get_chat(chat)
-                chat_name = chat_info.title or "Unknown"
-            except Exception:
-                chat_name = "Unknown"
+        try:
+            chat_info = await app.get_chat(chat)
+            chat_name = chat_info.title or "Unknown"
+        except Exception:
+            chat_name = "Unknown"
 
-            text += (
-                f"\n<blockquote>"
-                f"<b>{i+1}. {chat_name}</b>\n"
-                f"   🆔 <code>{chat}</code>\n"
-                f"   🎵 {playing.title[:30]}"
-                f"</blockquote>"
-            )
+        text += (
+            f"\n<blockquote>"
+            f"<b>{i+1}. {chat_name}</b>\n"
+            f"   🆔 <code>{chat}</code>"
+            f"</blockquote>"
+        )
 
     if not text:
         return await sent.edit_text(m.lang["vc_empty"])
