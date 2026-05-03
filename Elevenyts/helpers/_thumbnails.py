@@ -1,5 +1,5 @@
 # ==============================================================================
-# _thumbnails.py - Spotify Style Music Player Thumbnail
+# _thumbnails.py - Spotify Style 16:9 Music Player Thumbnail
 # ==============================================================================
 
 import os
@@ -34,18 +34,23 @@ class Thumbnail:
     def __init__(self):
         try:
             self.title_font = ImageFont.truetype(
-                "Elevenyts/helpers/Raleway-Bold.ttf", 54)
+                "Elevenyts/helpers/Raleway-Bold.ttf", 58)
+            self.title_font_sm = ImageFont.truetype(
+                "Elevenyts/helpers/Raleway-Bold.ttf", 44)
             self.nowplaying_font = ImageFont.truetype(
-                "Elevenyts/helpers/Raleway-Bold.ttf", 20)
+                "Elevenyts/helpers/Raleway-Bold.ttf", 22)
             self.meta_font = ImageFont.truetype(
-                "Elevenyts/helpers/Inter-Light.ttf", 24)
+                "Elevenyts/helpers/Inter-Light.ttf", 26)
             self.time_font = ImageFont.truetype(
                 "Elevenyts/helpers/Inter-Light.ttf", 22)
             self.small_font = ImageFont.truetype(
                 "Elevenyts/helpers/Inter-Light.ttf", 20)
+            self.ctrl_font = ImageFont.truetype(
+                "Elevenyts/helpers/Raleway-Bold.ttf", 38)
         except OSError:
-            self.title_font = self.nowplaying_font = self.meta_font = \
-                self.time_font = self.small_font = ImageFont.load_default()
+            self.title_font = self.title_font_sm = self.nowplaying_font = \
+                self.meta_font = self.time_font = self.small_font = \
+                self.ctrl_font = ImageFont.load_default()
 
     async def save_thumb(self, output_path: str, url: str) -> str:
         async with aiohttp.ClientSession() as session:
@@ -76,12 +81,12 @@ class Thumbnail:
             (0, 0, *img.size), radius, fill=255)
         bg.paste(img, pos, mask)
 
-    def _draw_glass_card(self, canvas, x1, y1, x2, y2, radius=32):
+    def _draw_glass_card(self, canvas, x1, y1, x2, y2, radius=36):
         # Shadow
         shadow = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
         sd = ImageDraw.Draw(shadow)
-        for i in range(30, 0, -1):
-            alpha = int(120 * (i / 30))
+        for i in range(25, 0, -1):
+            alpha = int(110 * (i / 25))
             sd.rounded_rectangle(
                 [x1 + i, y1 + i // 2, x2 + i, y2 + i // 2],
                 radius=radius, fill=(0, 0, 0, alpha)
@@ -90,7 +95,7 @@ class Thumbnail:
         canvas.paste(merged, (0, 0))
 
         # Glass fill
-        glass = Image.new("RGBA", (x2 - x1, y2 - y1), (20, 10, 40, 200))
+        glass = Image.new("RGBA", (x2 - x1, y2 - y1), (18, 8, 38, 215))
         mask = Image.new("L", glass.size, 0)
         ImageDraw.Draw(mask).rounded_rectangle(
             (0, 0, *glass.size), radius=radius, fill=255)
@@ -102,172 +107,203 @@ class Thumbnail:
         draw.rounded_rectangle(
             [x1, y1, x2, y2],
             radius=radius,
-            outline=(255, 255, 255, 30),
+            outline=(255, 255, 255, 28),
             width=1
         )
-        # Inner purple border
+        # Inner border
         draw.rounded_rectangle(
             [x1 + 2, y1 + 2, x2 - 2, y2 - 2],
             radius=radius - 2,
-            outline=(150, 80, 255, 25),
+            outline=(150, 80, 255, 22),
             width=1
         )
         # Top shine
         hl_w = x2 - x1 - radius * 2
         if hl_w > 0:
-            shine = Image.new("RGBA", (hl_w, 2), (255, 255, 255, 40))
+            shine = Image.new("RGBA", (hl_w, 2), (255, 255, 255, 38))
             canvas.paste(shine, (x1 + radius, y1 + 3), shine)
+
+    def _wrap_title(self, title, font, max_w):
+        words = title.split()
+        lines = []
+        current = ""
+        for word in words:
+            test = (current + " " + word).strip()
+            if font.getlength(test) <= max_w:
+                current = test
+            else:
+                if current:
+                    lines.append(current)
+                current = word
+        if current:
+            lines.append(current)
+        return lines[:2]
 
     def _generate_sync(self, temp, output, song, size=(1280, 720)):
         try:
             W, H = size
 
-            # ── BACKGROUND — blurred thumbnail ──
+            # ── BACKGROUND ──
             with Image.open(temp) as raw:
                 bg = raw.resize((W, H)).convert("RGBA")
 
-            bg = bg.filter(ImageFilter.GaussianBlur(35))
+            bg = bg.filter(ImageFilter.GaussianBlur(32))
 
-            # Dark overlay
-            overlay = Image.new("RGBA", (W, H), (5, 2, 15, 185))
+            overlay = Image.new("RGBA", (W, H), (5, 2, 15, 190))
             bg = Image.alpha_composite(bg, overlay)
+
+            # Radial glow
+            glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+            gd = ImageDraw.Draw(glow)
+            for i in range(400, 0, -1):
+                alpha = int(28 * (1 - i / 400))
+                gd.ellipse(
+                    [W // 2 - i, H // 2 - i, W // 2 + i, H // 2 + i],
+                    fill=(80, 20, 160, alpha)
+                )
+            bg = Image.alpha_composite(bg, glow)
 
             # Vignette
             vig = Image.new("RGBA", (W, H), (0, 0, 0, 0))
             vd = ImageDraw.Draw(vig)
-            for i in range(120):
-                alpha = int(200 * (i / 120))
+            for i in range(100):
+                alpha = int(180 * (i / 100))
                 vd.rectangle([i, i, W - i, H - i], outline=(0, 0, 0, alpha))
             bg = Image.alpha_composite(bg, vig)
 
-            # ── GLASS CARD — center ──
-            card_w = 520
-            card_h = 640
-            cx1 = (W - card_w) // 2
-            cy1 = (H - card_h) // 2
-            cx2 = cx1 + card_w
-            cy2 = cy1 + card_h
+            # ── GLASS CARD — wide 16:9 ──
+            pad = 45
+            cx1, cy1 = pad, pad
+            cx2, cy2 = W - pad, H - pad
 
             self._draw_glass_card(bg, cx1, cy1, cx2, cy2, radius=36)
 
             draw = ImageDraw.Draw(bg)
 
             # ── NOW PLAYING — top center ──
+            np_y = cy1 + 28
             np_text = "NOW PLAYING"
             np_w = self.nowplaying_font.getlength(np_text)
-            np_x = cx1 + (card_w - np_w) // 2
-            np_y = cy1 + 28
+            np_x = cx1 + (cx2 - cx1 - np_w) // 2 + 14
 
-            # Dot
+            # Green dot
             draw.ellipse(
-                [np_x - 18, np_y + 4, np_x - 6, np_y + 16],
+                [np_x - 18, np_y + 5, np_x - 6, np_y + 17],
                 fill=(29, 185, 84)
             )
             draw.text(
                 (np_x, np_y), np_text,
                 font=self.nowplaying_font,
-                fill=(255, 255, 255, 150)
+                fill=(200, 180, 240)
             )
 
-            # ── ALBUM ART — center top ──
-            art_size = 260
-            art_x = cx1 + (card_w - art_size) // 2
-            art_y = cy1 + 65
+            # ── THUMBNAIL — left inside card ──
+            thumb_size = 340
+            thumb_x = cx1 + 45
+            thumb_y = cy1 + (cy2 - cy1 - thumb_size) // 2
 
-            # Glow behind art
-            glow = Image.new("RGBA", bg.size, (0, 0, 0, 0))
-            gd = ImageDraw.Draw(glow)
-            for i in range(25, 0, -1):
-                alpha = int(70 * (i / 25))
-                gd.rounded_rectangle(
-                    [art_x - i, art_y - i,
-                     art_x + art_size + i, art_y + art_size + i],
-                    radius=20 + i,
+            # Glow behind thumb
+            glow_t = Image.new("RGBA", bg.size, (0, 0, 0, 0))
+            gt = ImageDraw.Draw(glow_t)
+            for i in range(20, 0, -1):
+                alpha = int(60 * (i / 20))
+                gt.rounded_rectangle(
+                    [thumb_x - i, thumb_y - i,
+                     thumb_x + thumb_size + i, thumb_y + thumb_size + i],
+                    radius=24 + i,
                     fill=(100, 40, 200, alpha)
                 )
-            bg = Image.alpha_composite(bg, glow)
+            bg = Image.alpha_composite(bg, glow_t)
             draw = ImageDraw.Draw(bg)
 
             with Image.open(temp) as raw_art:
                 art = square_crop(raw_art.convert("RGBA"))
-                art = art.resize((art_size, art_size))
+                art = art.resize((thumb_size, thumb_size))
 
-            self._paste_rounded(bg, art, (art_x, art_y), radius=20)
+            self._paste_rounded(bg, art, (thumb_x, thumb_y), radius=22)
 
-            # Border around art
             draw = ImageDraw.Draw(bg)
             draw.rounded_rectangle(
-                [art_x - 2, art_y - 2,
-                 art_x + art_size + 2, art_y + art_size + 2],
-                radius=22,
-                outline=(255, 255, 255, 40),
+                [thumb_x - 2, thumb_y - 2,
+                 thumb_x + thumb_size + 2, thumb_y + thumb_size + 2],
+                radius=24,
+                outline=(255, 255, 255, 35),
                 width=2
             )
 
-            # ── SONG TITLE — center ──
-            title_y = art_y + art_size + 28
-            title = re.sub(r"\W+", " ", song.title).title()
+            # ── RIGHT SIDE INFO ──
+            info_x = thumb_x + thumb_size + 55
+            info_max_w = cx2 - info_x - 40
+            card_h = cy2 - cy1
 
-            # Trim to card width
-            max_title_w = card_w - 60
-            title_trimmed = trim_to_width(title, self.title_font, max_title_w)
-            title_w = self.title_font.getlength(title_trimmed)
-            title_x = cx1 + (card_w - title_w) // 2
-
-            # Shadow
-            for dx, dy in [(-2, 2), (2, 2)]:
-                draw.text(
-                    (title_x + dx, title_y + dy),
-                    title_trimmed,
-                    font=self.title_font,
-                    fill=(60, 20, 100)
-                )
-            draw.text(
-                (title_x, title_y),
-                title_trimmed,
-                font=self.title_font,
-                fill=(255, 255, 255)
+            # Vertical center calculation
+            line_h = self.title_font_sm.size + 8
+            total_h = (
+                line_h * 2 +
+                14 +
+                self.meta_font.size +
+                10 +
+                self.small_font.size +
+                32 +
+                6 +
+                14 +
+                self.time_font.size +
+                32 +
+                self.ctrl_font.size + 16
             )
+            start_y = cy1 + (card_h - total_h) // 2
 
-            # ── META — views ──
-            meta_y = title_y + self.title_font.size + 10
+            # ── TITLE ──
+            title_raw = re.sub(r"\W+", " ", song.title).title()
+            lines = self._wrap_title(title_raw, self.title_font_sm, info_max_w)
+            title_y = start_y
+
+            for i, line in enumerate(lines):
+                ly = title_y + i * line_h
+                for dx, dy in [(-2, 2), (2, 2)]:
+                    draw.text(
+                        (info_x + dx, ly + dy), line,
+                        font=self.title_font_sm, fill=(55, 18, 100)
+                    )
+                draw.text(
+                    (info_x, ly), line,
+                    font=self.title_font_sm, fill=(255, 255, 255)
+                )
+
+            title_end_y = title_y + len(lines) * line_h
+
+            # ── VIEWS ──
+            meta_y = title_end_y + 14
             views = song.view_count or "Unknown"
-            meta_text = f"YouTube  •  {views}"
-            meta_w = self.meta_font.getlength(meta_text)
-            meta_x = cx1 + (card_w - meta_w) // 2
             draw.text(
-                (meta_x, meta_y), meta_text,
-                font=self.meta_font,
-                fill=(180, 150, 220)
+                (info_x, meta_y),
+                f"YouTube  •  {views}",
+                font=self.meta_font, fill=(180, 150, 225)
             )
 
             # ── REQUESTED BY ──
-            req_y = meta_y + self.meta_font.size + 8
+            req_y = meta_y + self.meta_font.size + 10
             requested_by = getattr(song, 'requested_by', None)
             if requested_by:
-                name = getattr(requested_by, 'first_name', '') or str(requested_by)
-                req_text = f"Requested by  {name}"
-                req_w = self.small_font.getlength(req_text)
-                req_x = cx1 + (card_w - req_w) // 2
+                name = getattr(
+                    requested_by, 'first_name', '') or str(requested_by)
                 draw.text(
-                    (req_x, req_y), req_text,
-                    font=self.small_font,
-                    fill=(150, 100, 220)
+                    (info_x, req_y), f"▸  Requested by  {name}",
+                    font=self.small_font, fill=(140, 100, 210)
                 )
 
             # ── PROGRESS BAR ──
-            bar_pad = 40
-            bar_x1 = cx1 + bar_pad
-            bar_x2 = cx2 - bar_pad
-            bar_y = req_y + self.small_font.size + 24
-            bar_h = 5
+            bar_x1 = info_x
+            bar_x2 = cx2 - 45
+            bar_y = req_y + self.small_font.size + 32
+            bar_h = 6
             bar_w = bar_x2 - bar_x1
             fill_w = int(bar_w * 0.38)
 
             # Track
             draw.rounded_rectangle(
                 [bar_x1, bar_y, bar_x2, bar_y + bar_h],
-                radius=3, fill=(255, 255, 255, 40)
+                radius=3, fill=(255, 255, 255, 35)
             )
             # Fill — Spotify green
             draw.rounded_rectangle(
@@ -278,34 +314,34 @@ class Thumbnail:
             dot_x = bar_x1 + fill_w
             dot_y = bar_y + bar_h // 2
             draw.ellipse(
-                [dot_x - 8, dot_y - 8, dot_x + 8, dot_y + 8],
+                [dot_x - 9, dot_y - 9, dot_x + 9, dot_y + 9],
                 fill=(255, 255, 255)
             )
 
-            # Time labels
-            time_y = bar_y + bar_h + 10
+            # Time
+            time_y = bar_y + bar_h + 12
             draw.text(
                 (bar_x1, time_y), "00:00",
-                font=self.time_font, fill=(180, 160, 210)
+                font=self.time_font, fill=(160, 130, 205)
             )
             duration = getattr(song, 'duration', '0:00')
             dur_w = self.time_font.getlength(duration)
             draw.text(
                 (bar_x2 - dur_w, time_y), duration,
-                font=self.time_font, fill=(180, 160, 210)
+                font=self.time_font, fill=(160, 130, 205)
             )
 
-            # ── CONTROLS — center ──
+            # ── CONTROLS ──
             ctrl_y = time_y + self.time_font.size + 28
-            ctrl_cx = cx1 + card_w // 2
-            spacing = 90
+            ctrl_cx = (info_x + bar_x2) // 2
+            spacing = int((bar_x2 - info_x) // 5)
 
             controls = [
-                ("⇄", 20, (180, 150, 220)),   # shuffle
-                ("⏮", 36, (220, 200, 255)),   # prev
-                ("▶", 44, (255, 255, 255)),   # play — white circle
-                ("⏭", 36, (220, 200, 255)),   # next
-                ("↺", 20, (180, 150, 220)),   # repeat
+                ("⇄", (170, 140, 220)),
+                ("⏮", (210, 185, 245)),
+                ("▶", (255, 255, 255)),
+                ("⏭", (210, 185, 245)),
+                ("↺", (170, 140, 220)),
             ]
             positions = [
                 ctrl_cx - spacing * 2,
@@ -315,32 +351,24 @@ class Thumbnail:
                 ctrl_cx + spacing * 2,
             ]
 
-            for (symbol, size_px, color), x in zip(controls, positions):
-                try:
-                    font = ImageFont.truetype(
-                        "Elevenyts/helpers/Raleway-Bold.ttf", size_px)
-                except:
-                    font = self.small_font
-
+            for (symbol, color), x in zip(controls, positions):
                 if symbol == "▶":
-                    # White circle bg
-                    r = 32
+                    r = self.ctrl_font.size // 2 + 12
                     draw.ellipse(
-                        [x - r, ctrl_y - 8,
-                         x + r, ctrl_y + size_px + 8],
+                        [x - r, ctrl_y - 6,
+                         x + r, ctrl_y + self.ctrl_font.size + 6],
                         fill=(255, 255, 255)
                     )
-                    # Dark play symbol
-                    sw = font.getlength(symbol)
+                    sw = int(self.ctrl_font.getlength(symbol))
                     draw.text(
-                        (x - int(sw // 2) + 2, ctrl_y),
-                        symbol, font=font, fill=(20, 10, 40)
+                        (x - sw // 2 + 2, ctrl_y),
+                        symbol, font=self.ctrl_font, fill=(18, 8, 38)
                     )
                 else:
-                    sw = font.getlength(symbol)
+                    sw = int(self.ctrl_font.getlength(symbol))
                     draw.text(
-                        (x - int(sw // 2), ctrl_y),
-                        symbol, font=font, fill=color
+                        (x - sw // 2, ctrl_y),
+                        symbol, font=self.ctrl_font, fill=color
                     )
 
             # ── SAVE ──
