@@ -1,9 +1,9 @@
 import yt_dlp
 from pyrogram import filters
 from pytgcalls.types import MediaStream
-from Elevenyts import app, call
+from Elevenyts import app, call, tune, lang
 
-# 360p Optimized Settings
+# 360p High Performance Settings
 ydl_opts = {
     "format": "best[height<=360][ext=mp4]/best[ext=mp4]/simple",
     "quiet": True,
@@ -11,10 +11,17 @@ ydl_opts = {
     "geo_bypass": True,
 }
 
-@app.on_message(filters.command(["vplay", "vstream"]))
+@app.on_message(filters.command(["vplay", "vstream"]) & filters.group & ~app.bl_users)
+@lang.language()
 async def vplay_handler(client, message):
+    # Auto-delete command message
+    try:
+        await message.delete()
+    except:
+        pass
+
     if len(message.command) < 2:
-        return await message.reply_text("❌ Bhai, YouTube link toh do!")
+        return await message.reply_text("❌ Bhai, YouTube link toh do!\nExample: `/vplay https://youtu.be/xyz`")
 
     url = message.text.split(None, 1)[1]
     status = await message.reply_text("🔍 Fetching 360p video stream...")
@@ -25,6 +32,7 @@ async def vplay_handler(client, message):
             stream_url = info['url']
             title = info['title']
 
+        # Call join karne ka logic with optimization flags
         await call.join_group_call(
             message.chat.id,
             MediaStream(
@@ -32,29 +40,29 @@ async def vplay_handler(client, message):
                 video_flags="-preset superfast -tune zerolatency",
             ),
         )
-        # Yahan hum wahi title aur quality dikha rahe hain jo buttons mein show hoti hai
-        await status.edit(f"🎬 **Now Playing:** {title}\n✅ **Quality:** 360p")
+        await status.edit(f"🎬 **Now Playing:** {title}\n✅ **Quality:** 360p (Optimized)")
 
     except Exception as e:
         await status.edit(f"❌ **Error:** {str(e)}")
 
-# STOP COMMAND - Linked with 'controls stop {chat_id}' logic
-@app.on_message(filters.command(["vstop", "vleave", "vclear"]))
+@app.on_message(filters.command(["vstop", "vleave", "stop", "end"]) & filters.group & ~app.bl_users)
+@lang.language()
 async def vstop_handler(client, message):
+    # Auto-delete command message
     try:
-        # Tumhare inline button ka 'stop' logic yahan force trigger hoga
-        await call.leave_group_call(message.chat.id)
-        await message.reply_text("⏹ **Stopped:** Video stream band kar di gayi hai.")
-    except Exception as e:
-        await message.reply_text("ℹ️ Call pehle se hi band hai.")
+        await message.delete()
+    except:
+        pass
 
-# SKIP COMMAND - Linked with 'controls skip {chat_id}' logic
-@app.on_message(filters.command(["vskip", "vnext"]))
-async def vskip_handler(client, message):
     try:
-        # Skip ke liye hum current stream ko drop kar rahe hain
-        # Agar queue system active hai, toh call.leave isse next track par bhej dega
-        await call.leave_group_call(message.chat.id)
-        await message.reply_text("⏩ **Skipped:** Current video skip kar di gayi.")
+        # Framework ke tune.py se stop_playback call kar rahe hain 
+        # Taaki database aur call dono sahi se clear ho jayein
+        await tune.stop_playback(message.chat.id)
+        await message.reply_text("⏹ **Stream Stopped:** Video band kar di gayi hai.")
     except Exception as e:
-        await message.reply_text("❌ Skip karne mein dikat aa rahi hai.")
+        # Agar tune.py fail ho toh direct leave try karega
+        try:
+            await call.leave_group_call(message.chat.id)
+            await message.reply_text("⏹ **Stream Stopped.**")
+        except:
+            await message.reply_text("ℹ️ Stream pehle se hi band hai.")
