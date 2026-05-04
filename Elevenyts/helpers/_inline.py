@@ -34,7 +34,7 @@ class Inline:
                 [
                     self.ikb(text="▷", callback_data=f"controls resume {chat_id}"),
                     self.ikb(text="II", callback_data=f"controls pause {chat_id}"), # style=enums.ButtonStyle.PRIMARY),
-                    self.ikb(text="↻", callback_data=f"controls replay {chat_id}"), #,style=enums.ButtonStyle.SUCCESS),
+                    self.ikb(text="↻", callback_data=f"controls replay {chat_id}",style=enums.ButtonStyle.SUCCESS),
                     self.ikb(text="‣‣I", callback_data=f"controls skip {chat_id}"), # style=enums.ButtonStyle.PRIMARY),
                     self.ikb(text="▢", callback_data=f"controls stop {chat_id}"),
                 ]
@@ -54,7 +54,7 @@ class Inline:
         if back:
             rows = [
                 [
-                    self.ikb(text="ʙᴀᴄᴋ", callback_data="help_main"),
+                    self.ikb(text="ʙᴀᴄᴋ", callback_data="help_main", style=enums.ButtonStyle.SUCCESS),
                 ]
             ]
         else:
