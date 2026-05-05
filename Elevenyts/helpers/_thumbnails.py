@@ -1,5 +1,5 @@
 # ==============================================================================
-# Final Code - Real Blur BG + Views (No Antavion Branding)
+# Final Code - Dynamic Title Scaling & Real Blur BG (No Branding)
 # ==============================================================================
 
 import os
@@ -15,12 +15,13 @@ FONT_REG = "Elevenyts/helpers/Inter-Light.ttf"
 class Thumbnail:
     def __init__(self):
         try:
-            self.title_font = ImageFont.truetype(FONT_BOLD, 45)
+            self.title_font_path = FONT_BOLD
             self.artist_font = ImageFont.truetype(FONT_REG, 30)
             self.time_font = ImageFont.truetype(FONT_REG, 22)
             self.badge_font = ImageFont.truetype(FONT_BOLD, 18)
         except OSError:
-            self.title_font = self.artist_font = self.time_font = self.badge_font = ImageFont.load_default()
+            self.title_font_path = None
+            self.artist_font = self.time_font = self.badge_font = ImageFont.load_default()
 
     async def save_thumb(self, output_path: str, url: str) -> str:
         async with aiohttp.ClientSession() as session:
@@ -53,10 +54,8 @@ class Thumbnail:
         try:
             # 1. Background: Real Thumbnail Blur
             with Image.open(temp) as raw:
-                # Thumbnail ko resize karke heavy blur apply karna
                 bg = raw.convert("RGBA").resize((W, H))
                 bg = bg.filter(ImageFilter.GaussianBlur(100)) 
-                # Halka sa dark overlay taaki text aur artwork pop kare
                 overlay = Image.new("RGBA", (W, H), (0, 0, 0, 160))
                 bg = Image.alpha_composite(bg, overlay)
 
@@ -75,22 +74,40 @@ class Thumbnail:
             ImageDraw.Draw(mask).rounded_rectangle((0, 0, *art.size), 45, fill=255)
             bg.paste(art, (margin, margin), mask)
 
-            # 3. Right Side Info (Views Only)
+            # 3. Right Side Info Area
             right_x = margin + thumb_size + 85
             right_w = W - right_x - 80
             center_x = right_x + (right_w // 2)
 
-            # Title
-            clean_title = song.title[:28] + "..." if len(song.title) > 28 else song.title
-            draw.text((right_x, 130), clean_title, font=self.title_font, fill=(255, 255, 255))
+            # --- DYNAMIC TITLE SCALING ---
+            title_text = song.title
+            current_font_size = 45
             
-            # Subtitle: Views and YouTube (Antavion Removed)
-            views = getattr(song, 'view_count', 'Unknown')
+            if self.title_font_path:
+                title_font = ImageFont.truetype(self.title_font_path, current_font_size)
+                # Check if title exceeds width, then shrink font
+                while title_font.getlength(title_text) > right_w and current_font_size > 25:
+                    current_font_size -= 2
+                    title_font = ImageFont.truetype(self.title_font_path, current_font_size)
+                
+                # Final Truncation if still too long
+                if title_font.getlength(title_text) > right_w:
+                    while title_font.getlength(title_text + "...") > right_w:
+                        title_text = title_text[:-1]
+                    title_text += "..."
+            else:
+                title_font = ImageFont.load_default()
+
+            draw.text((right_x, 130), title_text, font=title_font, fill=(255, 255, 255))
+            
+            # Subtitle: Views and YouTube
+            views = getattr(song, 'view_count', '0')
             draw.text((right_x, 195), f"{views} views • YouTube", font=self.artist_font, fill=(180, 180, 180))
 
             # 4. Progress Bar & MUSIC Badge
             bar_y = 320
             draw.rounded_rectangle([right_x, bar_y, right_x + right_w, bar_y + 7], radius=4, fill=(255, 255, 255, 60))
+            # Fixed bar to 40% for visual aesthetics
             draw.rounded_rectangle([right_x, bar_y, right_x + (right_w * 0.4), bar_y + 7], radius=4, fill=(255, 255, 255, 220))
 
             badge_text = "MUSIC"
@@ -99,13 +116,13 @@ class Thumbnail:
             draw.text((center_x - (bw/2) + 10, bar_y - 9), badge_text, font=self.badge_font, fill=(255, 255, 255))
 
             # Timestamps
-            draw.text((right_x, bar_y + 25), "0:03", font=self.time_font, fill=(160, 160, 160))
-            dur = getattr(song, 'duration', '4:30')
+            draw.text((right_x, bar_y + 25), "0:00", font=self.time_font, fill=(160, 160, 160))
+            dur = getattr(song, 'duration', '04:30')
             draw.text((right_x + right_w - 70, bar_y + 25), f"-{dur}", font=self.time_font, fill=(160, 160, 160))
 
             # 5. Drawing Symbols (Manual Shapes)
             ctrl_y = 450
-            # Pause
+            # Pause Icon
             draw.rectangle([center_x - 15, ctrl_y, center_x - 3, ctrl_y + 50], fill=(255, 255, 255))
             draw.rectangle([center_x + 3, ctrl_y, center_x + 15, ctrl_y + 50], fill=(255, 255, 255))
 
@@ -113,6 +130,7 @@ class Thumbnail:
                 pts = [(x, y + size/2), (x + size, y), (x + size, y + size)] if direction == 'left' else [(x + size, y + size/2), (x, y), (x, y + size)]
                 draw.polygon(pts, fill=(255, 255, 255))
 
+            # Skip/Back Icons
             draw_tri(center_x - 160, ctrl_y + 10, 30, 'left')
             draw_tri(center_x - 135, ctrl_y + 10, 30, 'left')
             draw_tri(center_x + 105, ctrl_y + 10, 30, 'right')
@@ -126,7 +144,7 @@ class Thumbnail:
             draw.rounded_rectangle([vx, vol_y, vx + (vol_bar_w * 0.7), vol_y + 5], radius=3, fill=(255, 255, 255, 180))
             draw.ellipse([vx + (vol_bar_w * 0.7) - 8, vol_y - 6, vx + (vol_bar_w * 0.7) + 8, vol_y + 10], fill=(255, 255, 255))
 
-            # 7. Bottom Icons
+            # 7. Bottom Icons (Layout/Queue)
             lx, ly = right_x + 60, 670
             draw.rounded_rectangle([lx, ly, lx+35, ly+25], radius=5, outline=(255, 255, 255, 150), width=2)
             qx, qy = right_x + right_w - 90, 670
