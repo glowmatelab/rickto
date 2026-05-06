@@ -25,7 +25,7 @@ class Inline:
         elif timer:
             # Timer button ko Red (DANGER) kiya
             keyboard.append(
-                [self.ikb(text=timer, callback_data=f"controls status {chat_id}", style=enums.ButtonStyle.PRIMARY)]
+                [self.ikb(text=timer, callback_data=f"controls status {chat_id}", style=enums.ButtonStyle.DANGER)]
             )
 
         if not remove:
