@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import random 
-from Elevenyts.storage import AUTO_PLAY
+from Elevenyts.storage import AUTO_PLAY, PLAYED_IDS  # ← PLAYED_IDS add karo
 from ntgcalls import ConnectionNotFound, TelegramServerError
 from pyrogram import enums, errors
 from pyrogram.errors import MessageIdInvalid
@@ -619,17 +619,21 @@ class TgCall(PyTgCalls):
                                 f"🔁 Autoplay Searching: {query}"
                             )
 
-                            played_ids = [t.id for t in queue.get_queue(chat_id)]
+                            if chat_id not in PLAYED_IDS:
+                                PLAYED_IDS[chat_id] = set()
                             next_track = None
                             for _ in range(5):
                                 candidate = await yt.search(query, random.randint(0, 9))
-                                if candidate and candidate.id not in played_ids:
+                                if candidate and candidate.id not in PLAYED_IDS[chat_id]:
                                     next_track = candidate
                                     break
-                                
+
                             if not next_track:
                                 next_track = await yt.search(query, random.randint(0, 9))
-
+                            if next_track:
+                                PLAYED_IDS[chat_id].add(next_track.id)
+                                if len(PLAYED_IDS[chat_id]) > 50:
+                                    PLAYED_IDS[chat_id] = set(list(PLAYED_IDS[chat_id])[-25:])
                             if next_track:
                                 next_track.is_autoplay = True
 
