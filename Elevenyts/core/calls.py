@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from Elevenyts import AUTO_PLAY
 from ntgcalls import ConnectionNotFound, TelegramServerError
 from pyrogram import enums, errors
 from pyrogram.errors import MessageIdInvalid
@@ -357,14 +358,27 @@ class TgCall(PyTgCalls):
                     except Exception:
                         pass
 
-                sent_photo = await self._send_photo_with_retry(
-                    chat_id=target_chat_for_messages,
-                    photo=_thumb,
-                    caption=text,
-                    reply_markup=keyboard,
-                )
-                if sent_photo:
-                    media.message_id = sent_photo.id
+                if getattr(media, "is_autoplay", False):
+
+                    sent_msg = await app.send_message(
+                        chat_id=target_chat_for_messages,
+                        text=f"▶️ Now Playing (Autoplay)\n\n{media.title}"
+                    )
+
+                    if sent_msg:
+                        media.message_id = sent_msg.id
+
+                else:
+
+                    sent_photo = await self._send_photo_with_retry(
+                        chat_id=target_chat_for_messages,
+                        photo=_thumb,
+                        caption=text,
+                        reply_markup=keyboard,
+                    )
+
+                    if sent_photo:
+                        media.message_id = sent_photo.id
 
                 try:
                     asyncio.create_task(
@@ -596,17 +610,64 @@ class TgCall(PyTgCalls):
                         f"Could not delete previous message in {chat_id}: {e}")
 
                 if not media:
+
+                    query = AUTO_PLAY.get(chat_id)
+
+                    if query:
+                        try:
+                            await app.send_message(
+                                chat_id,
+                                f"🔁 Autoplay Searching: {query}"
+                            )
+
+                            next_track = await yt.search(query, 0)
+
+                            if next_track:
+                                next_track.is_autoplay = True
+
+                                next_track.file_path = await yt.download(
+                                    next_track.id,
+                                    is_live=next_track.is_live
+                                )
+
+                                if next_track:
+                                    next_track.is_autoplay = True
+
+                                    next_track.file_path = await yt.download(
+                                        next_track.id,
+                                        is_live=next_track.is_live
+                                    )
+
+                                if next_track.file_path:
+                                    queue.put(chat_id, next_track)
+
+                                    await self.play_media(
+                                        chat_id=chat_id,
+                                        message=None,
+                                        media=next_track
+                                    )
+
+                                    return
+
+
+                        except Exception as e:
+                            logger.error(f"Autoplay Error: {e}")
+
                     if config.AUTO_END:
                         _lang = await lang.get_lang(chat_id)
                         try:
                             await app.send_message(
                                 chat_id=chat_id,
                                 text=_lang.get(
-                                    "auto_end", "✅ Queue finished. Stream ended automatically.")
+                                    "auto_end",
+                                    "✅ Queue finished. Stream ended automatically."
+                                )
                             )
                         except Exception as e:
                             logger.debug(
-                                f"Could not send auto_end message in {chat_id}: {e}")
+                                f"Could not send auto_end message in {chat_id}: {e}"
+                            )
+
                     return await self.stop(chat_id)
 
                 _lang = await lang.get_lang(chat_id)
