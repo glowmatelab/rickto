@@ -22,7 +22,7 @@ async def autoplay(_, message):
     # SAVE QUERY
     AUTO_PLAY[chat_id] = query
 
-    await message.reply(
+    msg = await message.reply(
         f"✅ Autoplay Enabled\n🎵 Keyword: {query}"
     )
 
@@ -31,7 +31,7 @@ async def autoplay(_, message):
         track = await yt.search(query, 0)
 
         if not track:
-            return await message.reply("❌ Song not found")
+            return await msg.edit_text("❌ Song not found")
 
         track.is_autoplay = True
 
@@ -42,13 +42,17 @@ async def autoplay(_, message):
         )
 
         if not track.file_path:
-            return await message.reply("❌ Download failed")
+            return await msg.edit_text("❌ Download failed")
 
         # ADD TO QUEUE
         queue.put(chat_id, track)
 
         # START PLAYING
-        await call.play_next(chat_id)
+        await call.play_media(
+            chat_id=chat_id,
+            message=msg,
+            media=track
+        )
 
     except Exception as e:
-        await message.reply(f"❌ Error:\n{e}")
+        await msg.edit_text(f"❌ Error:\n{e}")
