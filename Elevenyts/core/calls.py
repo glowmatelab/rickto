@@ -536,8 +536,6 @@ class TgCall(PyTgCalls):
 
         async with lock:
             try:
-                if not await db.get_call(chat_id):
-                    return
 
                 message_chat_id = None
                 try:
