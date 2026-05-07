@@ -619,7 +619,16 @@ class TgCall(PyTgCalls):
                                 f"🔁 Autoplay Searching: {query}"
                             )
 
-                            next_track = await yt.search(query, 0)
+                            played_ids = [t.id for t in queue.get_queue(chat_id)]
+                            next_track = None
+                            for _ in range(5):
+                                candidate = await yt.search(query, random.randint(0, 9))
+                                if candidate and candidate.id not in played_ids:
+                                    next_track = candidate
+                                    break
+                                
+                            if not next_track:
+                                next_track = await yt.search(query, random.randint(0, 9))
 
                             if next_track:
                                 next_track.is_autoplay = True
