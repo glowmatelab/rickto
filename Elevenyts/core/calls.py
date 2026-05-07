@@ -48,7 +48,8 @@ class TgCall(PyTgCalls):
         except Exception:
             return None
 
-    async def _send_photo_with_retry(self, chat_id: int, photo, caption: str, reply_markup):
+    # Aisa hona chahiye:
+async def _send_photo_with_retry(self, chat_id: int, photo, caption: str, reply_markup, spoiler: bool = False):
         """Send photo with FloodWait handling."""
         try:
             return await app.send_photo(
@@ -360,6 +361,7 @@ class TgCall(PyTgCalls):
                     photo=_thumb,
                     caption=text,
                     reply_markup=keyboard,
+                    spoiler=True,
                 )
                 if sent_photo:
                     media.message_id = sent_photo.id
