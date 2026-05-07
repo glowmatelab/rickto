@@ -3,7 +3,7 @@ import random
 from pyrogram import filters
 
 from Elevenyts import app, call, yt, queue
-from Elevenyts.storage import AUTO_PLAY
+from Elevenyts.storage import AUTO_PLAY, PLAYED_IDS
 
 
 @app.on_message(filters.command("autoplay") & filters.group)
@@ -20,6 +20,7 @@ async def autoplay(_, message):
     # DISABLE
     if query.lower() == "off":
         AUTO_PLAY.pop(chat_id, None)
+        PLAYED_IDS.pop(chat_id, None)
         return await message.reply("✅ Autoplay Disabled")
 
     # SAVE KEYWORD
@@ -46,6 +47,11 @@ async def autoplay(_, message):
 
         if not track.file_path:
             return await message.reply("❌ Download failed")
+
+        # TRACK PLAYED ID
+        if chat_id not in PLAYED_IDS:
+            PLAYED_IDS[chat_id] = set()
+        PLAYED_IDS[chat_id].add(track.id)
 
         # ADD TO QUEUE
         queue.add(chat_id, track)
