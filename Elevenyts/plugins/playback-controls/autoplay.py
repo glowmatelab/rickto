@@ -1,6 +1,7 @@
 from pyrogram import filters
 
-from Elevenyts import app, AUTO_PLAY, call, yt
+from Elevenyts import app, call, yt, queue
+from Elevenyts.storage import AUTO_PLAY
 
 
 @app.on_message(filters.command("autoplay") & filters.group)
@@ -44,7 +45,10 @@ async def autoplay(_, message):
         if not track.file_path:
             return await message.reply("❌ Download failed")
 
-        # PLAY DIRECTLY
+        # ADD TO QUEUE
+        queue.put(chat_id, track)
+
+        # PLAY
         await call.play_media(
             chat_id=chat_id,
             message=None,
