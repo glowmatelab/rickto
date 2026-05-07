@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from Elevenyts import AUTO_PLAY
+from Elevenyts.storage import AUTO_PLAY
 from ntgcalls import ConnectionNotFound, TelegramServerError
 from pyrogram import enums, errors
 from pyrogram.errors import MessageIdInvalid
