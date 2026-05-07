@@ -49,7 +49,7 @@ class TgCall(PyTgCalls):
             return None
 
     # Aisa hona chahiye:
-async def _send_photo_with_retry(self, chat_id: int, photo, caption: str, reply_markup, spoiler: bool = False):
+    async def _send_photo_with_retry(self, chat_id: int, photo, caption: str, reply_markup, spoiler: bool = False):
         """Send photo with FloodWait handling."""
         try:
             return await app.send_photo(
