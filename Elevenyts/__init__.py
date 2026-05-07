@@ -78,6 +78,7 @@ preload = PreloadManager()
 # Initialize call handler
 from Elevenyts.core.calls import TgCall
 tune = TgCall()
+call = tune
 
 
 async def stop() -> None:
