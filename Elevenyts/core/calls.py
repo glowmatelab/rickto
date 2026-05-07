@@ -623,7 +623,15 @@ class TgCall(PyTgCalls):
                                 PLAYED_IDS[chat_id] = set()
                             next_track = None
                             for _ in range(5):
-                                candidate = await yt.search(query, random.randint(0, 9))
+                                related_queries = [
+                                    query,
+                                    f"{query} new song",
+                                    f"{query} remix",
+                                    f"songs like {query}",
+                                    f"{query} best songs",
+                                ]
+                                search_query = random.choice(related_queries)
+                                candidate = await yt.search(search_query, random.randint(0, 5))
                                 if candidate and candidate.id not in PLAYED_IDS[chat_id]:
                                     next_track = candidate
                                     break
