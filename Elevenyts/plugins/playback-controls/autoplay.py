@@ -46,7 +46,7 @@ async def autoplay(_, message):
             return await message.reply("❌ Download failed")
 
         # ADD TO QUEUE
-        queue.put(chat_id, track)
+        queue.add(chat_id, track)
 
         # PLAY
         await call.play_media(
