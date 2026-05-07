@@ -26,3 +26,4 @@ def _list_modules():
 
 
 all_modules = frozenset(sorted(_list_modules()))
+AUTO_PLAY = {}
