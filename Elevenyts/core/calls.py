@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import random 
 from Elevenyts.storage import AUTO_PLAY
 from ntgcalls import ConnectionNotFound, TelegramServerError
 from pyrogram import enums, errors
@@ -628,16 +629,9 @@ class TgCall(PyTgCalls):
                                     is_live=next_track.is_live
                                 )
 
-                                if next_track:
-                                    next_track.is_autoplay = True
-
-                                    next_track.file_path = await yt.download(
-                                        next_track.id,
-                                        is_live=next_track.is_live
-                                    )
 
                                 if next_track.file_path:
-                                    queue.put(chat_id, next_track)
+                                    queue.add(chat_id, next_track)
 
                                     await self.play_media(
                                         chat_id=chat_id,
