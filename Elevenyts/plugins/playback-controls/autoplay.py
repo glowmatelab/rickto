@@ -1,3 +1,5 @@
+import random
+
 from pyrogram import filters
 
 from Elevenyts import app, call, yt, queue
@@ -29,7 +31,7 @@ async def autoplay(_, message):
 
     try:
         # SEARCH
-        track = await yt.search(query, 0)
+        track = await yt.search(query, random.randint(0, 4))
 
         if not track:
             return await message.reply("❌ Song not found")
