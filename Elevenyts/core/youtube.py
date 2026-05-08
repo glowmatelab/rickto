@@ -115,17 +115,14 @@ class YouTube:
                 return fresh
 
         try:
-            _search = VideosSearch(query, limit=10)  # limit=10 taaki alag results mile
+            _search = VideosSearch(query, limit=1)
             results = await _search.next()
         except Exception as e:
             logger.warning(f"⚠️ YouTube search failed for '{query}': {e}")
             return None
 
         if results and results["result"]:
-            # m_id ko index ki tarah use karo taaki alag results mile
-            result_list = results["result"]
-            idx = m_id % len(result_list)
-            data = result_list[idx]
+            data = results["result"][0]
             duration = data.get("duration")
             is_live = duration is None or duration == "LIVE"
 
