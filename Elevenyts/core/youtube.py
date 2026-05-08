@@ -235,36 +235,21 @@ class YouTube:
                 # First, get download token
                 params = {"url": video_id, "type": file_type}
                 
-                # Retry logic - HTTP 500 pe 3 baar try karo
-                for attempt in range(3):
-                    try:
-                        async with session.get(
-                            f"{self.api_url}/download",
-                            params=params,
-                            timeout=aiohttp.ClientTimeout(total=7)
-                        ) as response:
-                            if response.status == 500:
-                                logger.warning(f"⚠️ API HTTP 500, retry {attempt+1}/3 for {video_id}")
-                                await asyncio.sleep(2 * (attempt + 1))
-                                continue
-                            if response.status != 200:
-                                logger.error(f"❌ API request failed: HTTP {response.status}")
-                                return None
+                async with session.get(
+                    f"{self.api_url}/download",
+                    params=params,
+                    timeout=aiohttp.ClientTimeout(total=7)
+                ) as response:
+                    if response.status != 200:
+                        logger.error(f"❌ API request failed: HTTP {response.status}")
+                        return None
 
-                            data = await response.json()
-                            download_token = data.get("download_token")
-                            
-                            if not download_token:
-                                logger.error("❌ No download token received from API")
-                                return None
-                            break  # Success - loop se bahar
-                    except asyncio.TimeoutError:
-                        logger.warning(f"⚠️ API timeout, retry {attempt+1}/3 for {video_id}")
-                        await asyncio.sleep(2)
-                        continue
-                else:
-                    logger.error(f"❌ All 3 attempts failed for {video_id}")
-                    return None
+                    data = await response.json()
+                    download_token = data.get("download_token")
+                    
+                    if not download_token:
+                        logger.error("❌ No download token received from API")
+                        return None
 
                 # Download the file
                 stream_url = f"{self.api_url}/stream/{video_id}?type={file_type}&token={download_token}"
