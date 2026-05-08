@@ -363,10 +363,10 @@ class TgCall(PyTgCalls):
                     sent_msg = await app.send_message(
                         chat_id=target_chat_for_messages,
                         text=(
-                            "🚀 **ᴀᴜᴛᴏᴘʟᴀʏ ᴀᴄᴛɪᴠᴀᴛᴇᴅ**\n\n"
-                            f"<blockquote><b>🎵 ɴᴏᴡ ᴘʟᴀʏɪɴɢ:</b> {media.title}\n\n"
+                            "🦄 ᴀᴜᴛᴏᴘʟᴀʏ ᴀᴄᴛɪᴠᴀᴛᴇᴅ \n"
+                            f"<blockquote><b>🎵 ɴᴏᴡ ᴘʟᴀʏɪɴɢ: - </b>\n{media.title}\n"
                             "<b>✨ sᴜɢɢᴇsᴛᴇᴅ ʙʏ ᴀɪ sʏsᴛᴇᴍ</b></blockquote>\n"
-                            "<i>Powered by Elevenyts ⚡</i>"
+                            "<i> Made by Manish⚡</i>"
                             )
                     )
 
