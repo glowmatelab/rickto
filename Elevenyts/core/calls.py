@@ -366,7 +366,7 @@ class TgCall(PyTgCalls):
                             "🦄 ᴀᴜᴛᴏᴘʟᴀʏ ᴀᴄᴛɪᴠᴀᴛᴇᴅ \n"
                             f"<blockquote><b>🎵 ɴᴏᴡ ᴘʟᴀʏɪɴɢ: - </b>\n{media.title}\n"
                             "<b>✨ sᴜɢɢᴇsᴛᴇᴅ ʙʏ ᴀɪ sʏsᴛᴇᴍ</b></blockquote>\n"
-                            "<i> Made by Manish⚡</i>"
+                            "<blockquote><spoiler>✨ Made by <a href='https://t.me/galaxy_bots_update'>Manish</a> ⚡</spoiler></blockquote>"
                             )
                     )
 
