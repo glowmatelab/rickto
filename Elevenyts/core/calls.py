@@ -621,8 +621,10 @@ class TgCall(PyTgCalls):
 
                             if chat_id not in PLAYED_IDS:
                                 PLAYED_IDS[chat_id] = set()
-                            next_track = None
-                            for _ in range(5):
+                            
+                            # Saare candidates pehle collect karo
+                            candidates = []
+                            for _ in range(10):
                                 related_queries = [
                                     query,
                                     f"{query} new song",
@@ -631,39 +633,46 @@ class TgCall(PyTgCalls):
                                     f"{query} best songs",
                                 ]
                                 search_query = random.choice(related_queries)
-                                candidate = await yt.search(search_query, random.randint(0, 5), no_cache=True)
+                                candidate = await yt.search(search_query, random.randint(0, 9), no_cache=True)
                                 if candidate and candidate.id not in PLAYED_IDS[chat_id]:
-                                    next_track = candidate
+                                    if candidate.id not in [c.id for c in candidates]:
+                                        candidates.append(candidate)
+                                if len(candidates) >= 5:
                                     break
 
-                            if not next_track:
-                                next_track = await yt.search(query, random.randint(0, 9), no_cache=True)
-                            if next_track:
-                                PLAYED_IDS[chat_id].add(next_track.id)
+                            # Ek ek karke try karo jab tak download na ho
+                            next_track = None
+                            for candidate in candidates:
+                                PLAYED_IDS[chat_id].add(candidate.id)
                                 if len(PLAYED_IDS[chat_id]) > 50:
                                     PLAYED_IDS[chat_id] = set(list(PLAYED_IDS[chat_id])[-25:])
-                            if next_track:
-                                next_track.is_autoplay = True
+                                
+                                candidate.is_autoplay = True
+                                logger.info(f"🎵 Autoplay trying: {candidate.title} [{candidate.id}]")
+                                
+                                candidate.file_path = await yt.download(
+                                    candidate.id,
+                                    is_live=candidate.is_live
+                                )
+                                
+                                if candidate.file_path:
+                                    next_track = candidate
+                                    break
+                                else:
+                                    logger.warning(f"⚠️ Autoplay download failed for {candidate.id}, trying next...")
 
-                                next_track.file_path = await yt.download(
-                                    next_track.id,
-                                    is_live=next_track.is_live
+                            if next_track and next_track.file_path:
+                                # FIX: Pehle queue clear karo, phir naya track add karo
+                                queue.clear(chat_id)
+                                queue.add(chat_id, next_track)
+
+                                await self.play_media(
+                                    chat_id=chat_id,
+                                    message=None,
+                                    media=next_track
                                 )
 
-                                if next_track.file_path:
-                                    # FIX: Pehle queue clear karo, phir naya track add karo
-                                    # Warna queue mein yahi track pehle se hoga aur get_next()
-                                    # isko dubara return karega → infinite loop
-                                    queue.clear(chat_id)
-                                    queue.add(chat_id, next_track)
-
-                                    await self.play_media(
-                                        chat_id=chat_id,
-                                        message=None,
-                                        media=next_track
-                                    )
-
-                                    return
+                                return
 
 
                         except Exception as e:
