@@ -362,7 +362,12 @@ class TgCall(PyTgCalls):
 
                     sent_msg = await app.send_message(
                         chat_id=target_chat_for_messages,
-                        text=f"▶️ Now Playing (Autoplay)\n\n{media.title}"
+                        text=(
+                            "🚀 **ᴀᴜᴛᴏᴘʟᴀʏ ᴀᴄᴛɪᴠᴀᴛᴇᴅ**\n\n"
+                            f"<blockquote><b>🎵 ɴᴏᴡ ᴘʟᴀʏɪɴɢ:</b> {media.title}\n\n"
+                            "<b>✨ sᴜɢɢᴇsᴛᴇᴅ ʙʏ ᴀɪ sʏsᴛᴇᴍ</b></blockquote>\n"
+                            "<i>Powered by Elevenyts ⚡</i>"
+                            )
                     )
 
                     if sent_msg:
@@ -615,7 +620,10 @@ class TgCall(PyTgCalls):
                         try:
                             await app.send_message(
                                 chat_id,
-                                f"🔁 Autoplay Searching: {query}"
+                                text=(
+                                    "🔍 **sᴇᴀʀᴄʜɪɴɢ ɴᴇxᴛ ᴛʀᴀᴄᴋ...**\n"
+                                    f"<blockquote><b>✨ ʙᴀsᴇᴅ ᴏɴ:</b> `{query}`\n"
+                                    "<i>ᴘʟᴇᴀsᴇ ᴡᴀɪᴛ, ᴛʜᴇ ᴘᴀʀᴛʏ ɴᴇᴠᴇʀ sᴛᴏᴘs! ⚡</i>"
                             )
 
                             if chat_id not in PLAYED_IDS:
