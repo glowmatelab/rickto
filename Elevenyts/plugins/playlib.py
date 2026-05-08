@@ -8,20 +8,18 @@ import random
 
 from pyrogram import filters
 from pyrogram.types import Message
-
-from Elevenyts import app
-from pytgcalls import StreamType
-from pytgcalls.types.input_stream import AudioPiped
-from pytgcalls.types import Update
+from pytgcalls.types import MediaStream
 from pytgcalls.types.stream import StreamAudioEnded
+
+from Elevenyts import app, call
 
 
 # =========================================
 # SETTINGS
 # =========================================
 
-LIBRARY_CHANNEL = -1003956796095
-# replace with your channel id
+LIBRARY_CHANNEL = -100xxxxxxxxxx
+# apna channel id daalo
 
 
 # =========================================
@@ -38,9 +36,14 @@ CURRENT_FILE = {}
 # =========================================
 
 async def load_library():
+
     SONG_CACHE.clear()
 
-    async for msg in app.get_chat_history(LIBRARY_CHANNEL, limit=1000):
+    async for msg in app.get_chat_history(
+        LIBRARY_CHANNEL,
+        limit=1000
+    ):
+
         if msg.audio:
             SONG_CACHE.append(msg.id)
 
@@ -61,12 +64,15 @@ async def play_random(chat_id):
 
     msg_id = random.choice(SONG_CACHE)
 
-    song = await app.get_messages(LIBRARY_CHANNEL, msg_id)
+    song = await app.get_messages(
+        LIBRARY_CHANNEL,
+        msg_id
+    )
 
     file_path = await song.download()
 
-    # delete previous temp file
     old = CURRENT_FILE.get(chat_id)
+
     if old and os.path.exists(old):
         try:
             os.remove(old)
@@ -75,9 +81,9 @@ async def play_random(chat_id):
 
     CURRENT_FILE[chat_id] = file_path
 
-    await app.call_py.change_stream(
+    await call.change_stream(
         chat_id,
-        AudioPiped(file_path),
+        MediaStream(file_path),
     )
 
 
@@ -85,24 +91,34 @@ async def play_random(chat_id):
 # START RADIO
 # =========================================
 
-@app.on_message(filters.command("playlib") & filters.group)
-async def start_radio(_, message: Message):
+@app.on_message(
+    filters.command("playlib")
+    & filters.group
+)
+async def playlib(_, message: Message):
 
     chat_id = message.chat.id
 
     LIB_MODE[chat_id] = True
 
-    status = await message.reply_text("📻 Starting Library Radio...")
+    status = await message.reply_text(
+        "📻 Starting Library Radio..."
+    )
 
     if not SONG_CACHE:
         await load_library()
 
     if not SONG_CACHE:
-        return await status.edit_text("❌ No songs found")
+        return await status.edit(
+            "❌ No songs found in library"
+        )
 
     msg_id = random.choice(SONG_CACHE)
 
-    song = await app.get_messages(LIBRARY_CHANNEL, msg_id)
+    song = await app.get_messages(
+        LIBRARY_CHANNEL,
+        msg_id
+    )
 
     file_path = await song.download()
 
@@ -116,34 +132,38 @@ async def start_radio(_, message: Message):
 
     try:
 
-        await app.call_py.join_group_call(
+        await call.join_group_call(
             chat_id,
-            AudioPiped(file_path),
-            stream_type=StreamType().local_stream,
+            MediaStream(file_path),
         )
 
-        await status.edit_text(
-            f"📻 Library Radio Started\n\n🎵 {title}"
+        await status.edit(
+            f"📻 Radio Started\n\n🎵 {title}"
         )
 
     except Exception as e:
 
-        await status.edit_text(f"❌ Error:\n{e}")
+        await status.edit(
+            f"❌ Error:\n{e}"
+        )
 
 
 # =========================================
 # STOP RADIO
 # =========================================
 
-@app.on_message(filters.command("stoplib") & filters.group)
-async def stop_radio(_, message: Message):
+@app.on_message(
+    filters.command("stoplib")
+    & filters.group
+)
+async def stoplib(_, message: Message):
 
     chat_id = message.chat.id
 
     LIB_MODE[chat_id] = False
 
     try:
-        await app.call_py.leave_group_call(chat_id)
+        await call.leave_group_call(chat_id)
     except:
         pass
 
@@ -155,32 +175,41 @@ async def stop_radio(_, message: Message):
         except:
             pass
 
-    await message.reply_text("⏹ Library Radio Stopped")
+    await message.reply_text(
+        "⏹ Radio Stopped"
+    )
 
 
 # =========================================
 # SKIP SONG
 # =========================================
 
-@app.on_message(filters.command("skiplib") & filters.group)
-async def skip_radio(_, message: Message):
+@app.on_message(
+    filters.command("skiplib")
+    & filters.group
+)
+async def skiplib(_, message: Message):
 
     chat_id = message.chat.id
 
     if not LIB_MODE.get(chat_id):
-        return await message.reply_text("❌ Library mode not active")
+        return await message.reply_text(
+            "❌ Radio not active"
+        )
 
     await play_random(chat_id)
 
-    await message.reply_text("⏭ Playing Next Random Song")
+    await message.reply_text(
+        "⏭ Next Random Song"
+    )
 
 
 # =========================================
 # AUTO NEXT SONG
 # =========================================
 
-@app.call_py.on_update()
-async def stream_end_handler(_, update: Update):
+@call.on_update()
+async def stream_end(_, update):
 
     if isinstance(update, StreamAudioEnded):
 
