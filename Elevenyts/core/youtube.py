@@ -96,13 +96,13 @@ class YouTube:
             return link.split("&si")[0].split("?si")[0]
         return None
 
-    async def search(self, query: str, m_id: int, video: bool = False) -> Track | None:
+    async def search(self, query: str, m_id: int, video: bool = False, no_cache: bool = False) -> Track | None:
         """Search for a video on YouTube."""
-        # Check cache first (10-minute TTL)
+        # Check cache first (10-minute TTL) - skip cache if no_cache=True (autoplay use case)
         cache_key = f"{query}_{video}"
         current_time = asyncio.get_running_loop().time()
 
-        if cache_key in self.search_cache:
+        if not no_cache and cache_key in self.search_cache:
             cached_result, cache_timestamp = self.search_cache[cache_key]
             if current_time - cache_timestamp < 600:  # 10 minutes
                 # Return a fresh copy so downstream mutations don't leak back into cache
@@ -115,14 +115,17 @@ class YouTube:
                 return fresh
 
         try:
-            _search = VideosSearch(query, limit=1)
+            _search = VideosSearch(query, limit=10)  # limit=10 taaki alag results mile
             results = await _search.next()
         except Exception as e:
             logger.warning(f"⚠️ YouTube search failed for '{query}': {e}")
             return None
 
         if results and results["result"]:
-            data = results["result"][0]
+            # m_id ko index ki tarah use karo taaki alag results mile
+            result_list = results["result"]
+            idx = m_id % len(result_list)
+            data = result_list[idx]
             duration = data.get("duration")
             is_live = duration is None or duration == "LIVE"
 
@@ -232,21 +235,36 @@ class YouTube:
                 # First, get download token
                 params = {"url": video_id, "type": file_type}
                 
-                async with session.get(
-                    f"{self.api_url}/download",
-                    params=params,
-                    timeout=aiohttp.ClientTimeout(total=7)
-                ) as response:
-                    if response.status != 200:
-                        logger.error(f"❌ API request failed: HTTP {response.status}")
-                        return None
+                # Retry logic - HTTP 500 pe 3 baar try karo
+                for attempt in range(3):
+                    try:
+                        async with session.get(
+                            f"{self.api_url}/download",
+                            params=params,
+                            timeout=aiohttp.ClientTimeout(total=7)
+                        ) as response:
+                            if response.status == 500:
+                                logger.warning(f"⚠️ API HTTP 500, retry {attempt+1}/3 for {video_id}")
+                                await asyncio.sleep(2 * (attempt + 1))
+                                continue
+                            if response.status != 200:
+                                logger.error(f"❌ API request failed: HTTP {response.status}")
+                                return None
 
-                    data = await response.json()
-                    download_token = data.get("download_token")
-                    
-                    if not download_token:
-                        logger.error("❌ No download token received from API")
-                        return None
+                            data = await response.json()
+                            download_token = data.get("download_token")
+                            
+                            if not download_token:
+                                logger.error("❌ No download token received from API")
+                                return None
+                            break  # Success - loop se bahar
+                    except asyncio.TimeoutError:
+                        logger.warning(f"⚠️ API timeout, retry {attempt+1}/3 for {video_id}")
+                        await asyncio.sleep(2)
+                        continue
+                else:
+                    logger.error(f"❌ All 3 attempts failed for {video_id}")
+                    return None
                     
                     # Download the file
                     stream_url = f"{self.api_url}/stream/{video_id}?type={file_type}&token={download_token}"
