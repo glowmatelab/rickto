@@ -18,7 +18,7 @@ from Elevenyts import app, call
 # SETTINGS
 # =========================================
 
-LIBRARY_CHANNEL = -100xxxxxxxxxx
+LIBRARY_CHANNEL = -1003956796095
 # apna channel id daalo
 
 
