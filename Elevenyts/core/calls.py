@@ -336,7 +336,8 @@ class TgCall(PyTgCalls):
                     else:
                         percentage = min((played / duration) * 100, 100)
                     filled = int(round(bar_length * percentage / 100))
-                    timer_bar = "▰" * filled + "⨷" + "▱" * (bar_length - filled)
+                    timer_bar = "—" * filled + "●" + \
+                        "—" * (bar_length - filled)
                     if duration >= 3600:
                         played_time = time_module.strftime(
                             '%H:%M:%S', time_module.gmtime(played))
@@ -665,11 +666,15 @@ class TgCall(PyTgCalls):
                                 queue.clear(chat_id)
                                 queue.add(chat_id, next_track)
 
-                                await self.play_media(
-                                    chat_id=chat_id,
-                                    message=None,
-                                    media=next_track
-                                )
+                                try:
+                                    await self.play_media(
+                                        chat_id=chat_id,
+                                        message=None,
+                                        media=next_track
+                                    )
+                                    logger.info(f"✅ Autoplay play_media called for {next_track.title}")
+                                except Exception as e:
+                                    logger.error(f"❌ Autoplay play_media failed: {e}", exc_info=True)
 
                                 return
 
