@@ -676,6 +676,34 @@ class TgCall(PyTgCalls):
                                 except Exception as e:
                                     logger.error(f"❌ Autoplay play_media failed: {e}", exc_info=True)
 
+                                # Background mein next autoplay song preload karo
+                                async def preload_next_autoplay(cid, q, played):
+                                    try:
+                                        preload_queries = [
+                                            q,
+                                            f"{q} new song",
+                                            f"{q} remix",
+                                            f"songs like {q}",
+                                            f"{q} best songs",
+                                        ]
+                                        for _ in range(5):
+                                            pq = random.choice(preload_queries)
+                                            pc = await yt.search(pq, random.randint(0, 9), no_cache=True)
+                                            if pc and pc.id not in played:
+                                                pc.is_autoplay = True
+                                                pc.file_path = await yt.download(pc.id, is_live=pc.is_live)
+                                                if pc.file_path:
+                                                    queue.add(cid, pc)
+                                                    played.add(pc.id)
+                                                    logger.info(f"⏳ Preloaded next autoplay: {pc.title}")
+                                                    break
+                                    except Exception as e:
+                                        logger.debug(f"Autoplay preload error: {e}")
+
+                                asyncio.create_task(
+                                    preload_next_autoplay(chat_id, query, PLAYED_IDS.get(chat_id, set()))
+                                )
+
                                 return
 
 
