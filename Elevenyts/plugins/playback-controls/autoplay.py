@@ -21,7 +21,10 @@ async def autoplay(_, message):
     # SAVE KEYWORD
     AUTO_PLAY[chat_id] = query
     await message.reply(
-        f"✅ Autoplay Enabled\n🎵 Keyword: {query}"
+        "⚙️ ᴀᴜᴛᴏᴘʟᴀʏ sʏsᴛᴇᴍ ᴀᴄᴛɪᴠᴀᴛᴇᴅ\n\n
+        f"<blockquote><b>✅ sᴛᴀᴛᴜs:</b> ᴇɴᴀʙʟᴇᴅ\n"
+        f"<b>ʙᴀsᴇᴅ ᴏɴ:</b> `{query}`</blockquote>\n"
+        "<i>ɴᴏᴡ ᴛʜᴇ ʙᴏᴛ ᴡɪʟʟ ᴀᴜᴛᴏᴍᴀᴛɪᴄᴀʟʟʏ ᴘʟᴀʏ ʀᴇʟᴀᴛᴇᴅ sᴏɴɢs! ⚡</i>"
     )
 
     try:
