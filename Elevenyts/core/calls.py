@@ -364,7 +364,7 @@ class TgCall(PyTgCalls):
                         chat_id=target_chat_for_messages,
                         text=(
                             "🦄 ᴀᴜᴛᴏᴘʟᴀʏ ᴀᴄᴛɪᴠᴀᴛᴇᴅ \n"
-                            f"<blockquote><b>🎵 ɴᴏᴡ ᴘʟᴀʏɪɴɢ: - </b>\n{media.title}\n"
+                            f"<blockquote><b>🎵 ɴᴏᴡ ᴘʟᴀʏɪɴɢ: - </b>{media.title}\n"
                             "<b>✨ sᴜɢɢᴇsᴛᴇᴅ ʙʏ ᴀɪ sʏsᴛᴇᴍ</b></blockquote>\n"
                             "<blockquote><spoiler>✨ Made by <a href='https://t.me/galaxy_bots_update'>Manish</a> ⚡</spoiler></blockquote>"
                             )
