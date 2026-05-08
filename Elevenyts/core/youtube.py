@@ -265,41 +265,41 @@ class YouTube:
                 else:
                     logger.error(f"❌ All 3 attempts failed for {video_id}")
                     return None
+
+                # Download the file
+                stream_url = f"{self.api_url}/stream/{video_id}?type={file_type}&token={download_token}"
+                
+                async with session.get(
+                    stream_url,
+                    timeout=aiohttp.ClientTimeout(total=300 if video else 300)
+                ) as file_response:
+                    if file_response.status == 302:
+                        # Handle redirect
+                        redirect_url = file_response.headers.get('Location')
+                        if redirect_url:
+                            async with session.get(redirect_url) as final_response:
+                                if final_response.status != 200:
+                                    logger.error(f"❌ Redirect failed: HTTP {final_response.status}")
+                                    return None
+                                with open(file_path, "wb") as f:
+                                    async for chunk in final_response.content.iter_chunked(16384):
+                                        f.write(chunk)
+                    elif file_response.status == 200:
+                        # Direct download
+                        with open(file_path, "wb") as f:
+                            async for chunk in file_response.content.iter_chunked(16384):
+                                f.write(chunk)
+                    else:
+                        logger.error(f"❌ Download failed: HTTP {file_response.status}")
+                        return None
                     
-                    # Download the file
-                    stream_url = f"{self.api_url}/stream/{video_id}?type={file_type}&token={download_token}"
-                    
-                    async with session.get(
-                        stream_url,
-                        timeout=aiohttp.ClientTimeout(total=300 if video else 300)
-                    ) as file_response:
-                        if file_response.status == 302:
-                            # Handle redirect
-                            redirect_url = file_response.headers.get('Location')
-                            if redirect_url:
-                                async with session.get(redirect_url) as final_response:
-                                    if final_response.status != 200:
-                                        logger.error(f"❌ Redirect failed: HTTP {final_response.status}")
-                                        return None
-                                    with open(file_path, "wb") as f:
-                                        async for chunk in final_response.content.iter_chunked(16384):
-                                            f.write(chunk)
-                        elif file_response.status == 200:
-                            # Direct download
-                            with open(file_path, "wb") as f:
-                                async for chunk in file_response.content.iter_chunked(16384):
-                                    f.write(chunk)
-                        else:
-                            logger.error(f"❌ Download failed: HTTP {file_response.status}")
-                            return None
-                        
-                        # Verify file was downloaded
-                        if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-                            logger.info(f"✅ Downloaded: {video_id}.{ext}")
-                            return file_path
-                        else:
-                            logger.error(f"❌ Downloaded file is empty or missing: {file_path}")
-                            return None
+                    # Verify file was downloaded
+                    if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+                        logger.info(f"✅ Downloaded: {video_id}.{ext}")
+                        return file_path
+                    else:
+                        logger.error(f"❌ Downloaded file is empty or missing: {file_path}")
+                        return None
 
         except asyncio.TimeoutError:
             logger.error(f"❌ Download timeout for {video_id}")
