@@ -650,8 +650,11 @@ class TgCall(PyTgCalls):
                                     is_live=next_track.is_live
                                 )
 
-
                                 if next_track.file_path:
+                                    # FIX: Pehle queue clear karo, phir naya track add karo
+                                    # Warna queue mein yahi track pehle se hoga aur get_next()
+                                    # isko dubara return karega → infinite loop
+                                    queue.clear(chat_id)
                                     queue.add(chat_id, next_track)
 
                                     await self.play_media(
