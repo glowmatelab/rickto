@@ -10,4 +10,4 @@ python-dotenv~=1.2.1
 yt-dlp[default]>=2026.3.3
 ffmpeg
 Pillow
-spotipy
+ytmusicapi
