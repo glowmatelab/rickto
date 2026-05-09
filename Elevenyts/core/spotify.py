@@ -3,11 +3,13 @@ import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 from Elevenyts import config
 
+# Spotify Setup
 sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
     client_id=config.SPOTIFY_CLIENT_ID,
     client_secret=config.SPOTIFY_CLIENT_SECRET,
 ))
 
+# Regex to match Spotify links
 SPOTIFY_REGEX = re.compile(
     r"https?://open\.spotify\.com/(track|playlist|album)/([A-Za-z0-9]+)"
 )
@@ -25,17 +27,15 @@ async def get_track(url: str) -> str | None:
         sp_id = match.group(2)
 
         if sp_type == "track":
-            # sp.track() ki jagah sp.search() use karo
-            results = sp.search(q=f"spotify:track:{sp_id}", type="track", limit=1)
-            items = results["tracks"]["items"]
-            if not items:
-                return None
-            title = items[0]["name"]
-            artist = items[0]["artists"][0]["name"]
+            # Search ki jagah direct sp.track() use kar rahe hain (Bina Premium ke liye)
+            track = sp.track(sp_id)
+            title = track["name"]
+            artist = track["artists"][0]["name"]
             return f"{title} {artist}"
 
         return None
-    except Exception:
+    except Exception as e:
+        print(f"Error fetching track: {e}")
         return None
 
 async def get_playlist(url: str) -> list[str]:
@@ -49,6 +49,7 @@ async def get_playlist(url: str) -> list[str]:
         queries = []
 
         if sp_type == "playlist":
+            # Playlist tracks nikalne ke liye
             results = sp.playlist_tracks(sp_id)
             for item in results["items"]:
                 track = item["track"]
@@ -58,6 +59,7 @@ async def get_playlist(url: str) -> list[str]:
                     queries.append(f"{title} {artist}")
 
         elif sp_type == "album":
+            # Album tracks ke liye
             results = sp.album_tracks(sp_id)
             album_data = sp.album(sp_id)
             album_artist = album_data["artists"][0]["name"]
@@ -66,12 +68,17 @@ async def get_playlist(url: str) -> list[str]:
                 queries.append(f"{title} {album_artist}")
 
         return queries
-    except Exception:
+    except Exception as e:
+        print(f"Error fetching playlist/album: {e}")
         return []
 
 async def get_recommendations(seed_query: str) -> list[str]:
+    """
+    NOTE: Ye function 403 error de sakta hai agar account Premium nahi hai.
+    Spotify ne recommendations API ko restrict kar diya hai.
+    """
     try:
-        # Pehle seed track dhundo
+        # Step 1: Pehle seed track ki ID lo (Search use karna padega yahan)
         results = sp.search(q=seed_query, type="track", limit=1)
         items = results["tracks"]["items"]
         if not items:
@@ -79,7 +86,7 @@ async def get_recommendations(seed_query: str) -> list[str]:
 
         seed_track_id = items[0]["id"]
 
-        # Similar songs lo
+        # Step 2: Recommendations fetch karo
         recs = sp.recommendations(seed_tracks=[seed_track_id], limit=5)
         queries = []
         for track in recs["tracks"]:
@@ -88,5 +95,6 @@ async def get_recommendations(seed_query: str) -> list[str]:
             queries.append(f"{title} {artist}")
 
         return queries
-    except Exception:
+    except Exception as e:
+        print(f"Recommendations failed (Premium Required): {e}")
         return []
