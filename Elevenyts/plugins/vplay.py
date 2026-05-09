@@ -3,12 +3,12 @@ import re
 from pyrogram import filters
 from pytgcalls.types import MediaStream
 from Elevenyts import app, call, lang, yt
+from Elevenyts.helpers import Track
 
 
 @app.on_message(filters.command(["vplay", "vstream"]) & filters.group & ~app.bl_users)
 @lang.language()
 async def vplay_handler(client, message):
-    # Auto-delete command message
     try:
         await message.delete()
     except:
@@ -21,55 +21,35 @@ async def vplay_handler(client, message):
     status = await message.reply_text("🔍 YouTube link check kar raha hoon...")
 
     try:
-        # Validate URL
         if not yt.valid(url):
-            return await status.edit("❌ Invalid YouTube URL!**\nSahi YouTube link do bhai.")
+            return await status.edit("❌ **Invalid YouTube URL!**")
 
-        # Extract video ID from URL
         match = re.search(r"(?:v=|youtu\.be/|shorts/)([A-Za-z0-9_-]{11})", url)
         if not match:
-            return await status.edit("❌ Video ID nahi mila!**\nSahi YouTube link do.")
+            return await status.edit("❌ **Video ID nahi mila!**")
 
         video_id = match.group(1)
-        await status.edit("⏳ Video download ho raha hai... thoda ruk bhai 🎬")
+        await status.edit("⏳ Video download ho raha hai...")
 
-        # Use the existing API-based download (no yt-dlp, no bot detection issue)
+        # Track info fetch karo
+        track = await yt.search(video_id, status.id, video=True)
+        if not track:
+            return await status.edit("❌ **Video nahi mila YouTube pe!**")
+
+        # File download karo
         file_path = await yt.download(video_id, is_live=False, video=True)
-
         if not file_path or not os.path.exists(file_path):
-            return await status.edit(
-                "❌ Download failed!\n"
-                "API se video nahi aaya. Thodi der baad try kar."
-            )
+            return await status.edit("❌ **Download failed!**")
 
-        # Try to get title from search cache
-        title = f"YouTube [{video_id}]"
-        try:
-            track = await yt.search(video_id, message.id, video=True)
-            if track and track.title:
-                title = track.title
-        except:
-            pass
+        track.file_path = file_path
+        track.video = True
 
-        # Stream the downloaded file
-        await call.join_group_call(
-            message.chat.id,
-            MediaStream(file_path),
-        )
-
-        await status.edit(
-            f"🎬 Now Playing: {title}\n"
-            f"✅ Source:** YouTube API (No bot detection)"
+        # play_media se bajao
+        await call.play_media(
+            chat_id=message.chat.id,
+            message=status,
+            media=track,
         )
 
     except Exception as e:
-        err = str(e)
-        if "Sign in" in err or "bot" in err.lower():
-            await status.edit(
-                "❌ YouTube ne block kar diya!**\n"
-                "Bot detection issue hai. Admin se contact karo."
-            )
-        elif "unavailable" in err.lower() or "not available" in err.lower():
-            await status.edit("❌ Video unavailable!**\nShayad private ya deleted ho gaya.")
-        else:
-            await status.edit(f"❌ **Error:** {err}")
+        await status.edit(f"❌ **Error:** {str(e)}")
