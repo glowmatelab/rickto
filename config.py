@@ -58,8 +58,8 @@ class Config:
             "YOUTUBE_API_URL", "https://shrutibots.site")
     
         # ============ SPOTIFY CONFIGURATION ============
-        self.SPOTIFY_CLIENT_ID: str = getenv("SPOTIFY_CLIENT_ID", "")
-        self.SPOTIFY_CLIENT_SECRET: str = getenv("SPOTIFY_CLIENT_SECRET", "")
+        #self.SPOTIFY_CLIENT_ID: str = getenv("SPOTIFY_CLIENT_ID", "")
+        #self.SPOTIFY_CLIENT_SECRET: str = getenv("SPOTIFY_CLIENT_SECRET", "")
 
         # ============ IMAGE URLS — ALL LISTS FOR RANDOM ============
         self.DEFAULT_THUMBS: List[str] = [
