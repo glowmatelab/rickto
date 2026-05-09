@@ -1,7 +1,6 @@
 import asyncio
-
+from Elevenyts.core.spotify import is_spotify
 from pyrogram import enums, errors, types
-
 from Elevenyts import app, config, db, queue, yt
 
 
@@ -43,7 +42,7 @@ def checkUB(play):
         
         url = yt.url(m)
         # Only validate URL if not replying to media (Telegram files have t.me URLs)
-        if url and not m.reply_to_message and not yt.valid(url):
+        if url and not m.reply_to_message and not yt.valid(url) and not is_spotify(url):
             return await m.reply_text(m.lang["play_unsupported"])
 
         play_mode = await db.get_play_mode(m.chat.id)
