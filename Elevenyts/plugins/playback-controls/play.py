@@ -3,6 +3,7 @@ from pyrogram import types
 from pyrogram.errors import FloodWait, MessageIdInvalid, MessageDeleteForbidden, ChatSendPlainForbidden, ChatWriteForbidden
 
 from Elevenyts import tune, app, config, db, lang, queue, tg, yt
+from Elevenyts.core.spotify import is_spotify, get_track, get_playlist
 from Elevenyts.helpers import buttons, utils
 from Elevenyts.helpers._play import checkUB
 import asyncio
@@ -12,17 +13,6 @@ logger = logging.getLogger(__name__)
 
 
 async def safe_edit(message, text, **kwargs):
-    """
-    Safely edit a message with proper error handling for common Telegram API errors.
-    
-    Args:
-        message: The message object to edit
-        text: New text content
-        **kwargs: Additional arguments for edit_text
-        
-    Returns:
-        True if successful, False otherwise
-    """
     try:
         await message.edit_text(text, **kwargs)
         return True
@@ -34,25 +24,12 @@ async def safe_edit(message, text, **kwargs):
         except (MessageIdInvalid, MessageDeleteForbidden, Exception):
             return False
     except (MessageIdInvalid, MessageDeleteForbidden):
-        # Message was deleted or became invalid - this is expected
         return False
     except Exception:
-        # Other errors - log but don't crash
         return False
 
 
 async def safe_reply(message, text, **kwargs):
-    """
-    Safely send a reply message with proper error handling for media-only chats.
-    
-    Args:
-        message: The message object to reply to
-        text: Text content to send
-        **kwargs: Additional arguments for reply_text
-        
-    Returns:
-        The sent message object if successful, None otherwise
-    """
     try:
         return await message.reply_text(text, **kwargs)
     except (ChatSendPlainForbidden, ChatWriteForbidden):
@@ -64,21 +41,11 @@ async def safe_reply(message, text, **kwargs):
 
 
 def playlist_to_queue(chat_id: int, tracks: list) -> str:
-    """
-    Add multiple tracks to queue and format them as a message.
-    
-    Args:
-        chat_id: The chat ID where queue is managed
-        tracks: List of Track objects to add
-        
-    Returns:
-        Formatted string listing all added tracks
-    """
     text = "<blockquote expandable>"
     for track in tracks:
-        pos = queue.add(chat_id, track)  # Add track to queue (returns 0-based index)
-        text += f"<b>{pos}.</b> {track.title}\n"  # Show actual queue position
-    text = text[:1948] + "</blockquote>"  # Limit message length
+        pos = queue.add(chat_id, track)
+        text += f"<b>{pos}.</b> {track.title}\n"
+    text = text[:1948] + "</blockquote>"
     return text
 
 @app.on_message(
@@ -96,23 +63,19 @@ async def play_hndlr(
     cplay: bool = False,
     video: bool = False,
 ) -> None:
-    # Auto-delete command message
     try:
         await m.delete()
     except Exception:
         pass
     
-    # ========== DETECT VIDEO COMMANDS ==========
     command = m.command[0].lower()
     if command in ["vplay", "vplayforce"]:
         video = True
         if "force" in command:
             force = True
-    # ===========================================
     
-    # Handle channel play mode
     chat_id = m.chat.id
-    message_chat_id = m.chat.id  # Store original group chat ID for thumbnail
+    message_chat_id = m.chat.id
     if cplay:
         channel_id = await db.get_cmode(m.chat.id)
         if channel_id is None:
@@ -133,19 +96,14 @@ async def play_hndlr(
                 "ᴍᴀᴋᴇ ꜱᴜʀᴇ ɪ'ᴍ ᴀᴅᴍɪɴ ɪɴ ᴛʜᴇ ᴄʜᴀɴɴᴇʟ ᴀɴᴅ ᴄʜᴀɴɴᴇʟ ᴘʟᴀʏ ɪꜱ ꜱᴇᴛ ᴄᴏʀʀᴇᴄᴛʟʏ.</blockquote>"
             )
         
-        # Auto-join assistant to channel if not already a member
         client = await db.get_client(channel_id)
         try:
-            # Check if assistant is in the channel
             await app.get_chat_member(channel_id, client.id)
         except Exception:
-            # Assistant not in channel, try to join
             try:
-                # For channels, we need an invite link
                 if chat.username:
                     invite_link = chat.username
                 else:
-                    # Try to get/create invite link
                     try:
                         invite_link = chat.invite_link
                         if not invite_link:
@@ -157,16 +115,13 @@ async def play_hndlr(
                             f"ᴛᴏ ᴛʜᴇ ᴄʜᴀɴɴᴇʟ ᴀꜱ ᴀᴅᴍɪɴ ᴡɪᴛʜ ᴠᴏɪᴄᴇ ᴄʜᴀᴛ ᴘᴇʀᴍɪꜱꜱɪᴏɴꜱ.</blockquote>"
                         )
                 
-                # Show joining message
                 join_msg = await safe_reply(m,
                     f"<blockquote>🔄 ᴊᴏɪɴɪɴɢ ᴀꜱꜱɪꜱᴛᴀɴᴛ ᴛᴏ ᴄʜᴀɴɴᴇʟ...</blockquote>"
                 )
                 
-                # Try to join the channel
                 await client.join_chat(invite_link)
-                await asyncio.sleep(1)  # Give it time to fully join
+                await asyncio.sleep(1)
                 
-                # Delete joining message
                 try:
                     await join_msg.delete()
                 except:
@@ -181,7 +136,6 @@ async def play_hndlr(
                     f"Error: {error_str}</blockquote>"
                 )
 
-    # Select emoji for this play session
     play_emoji = m.lang["play_emoji"]
     
     try:
@@ -191,26 +145,51 @@ async def play_hndlr(
         try:
             sent = await safe_reply(m, m.lang["play_searching"].format(play_emoji))
         except FloodWait as e2:
-            # If still flood wait, wait longer and give up gracefully
             await asyncio.sleep(e2.value)
-            return  # Abort silently
+            return
         except Exception:
-            return  # Abort silently
+            return
     except Exception:
-        return  # If we can't even send initial message, abort
+        return
     
     mention = m.from_user.mention
     media = tg.get_media(m.reply_to_message) if m.reply_to_message else None
     tracks = []
-    file = None  # Initialize file variable
+    file = None
 
-    # Check media first (Telegram files) before URL extraction
     if media:
         setattr(sent, "lang", m.lang)
         file = await tg.download(m.reply_to_message, sent)
 
     elif url:
-        if "playlist" in url:
+        if is_spotify(url):
+            if "playlist" in url or "album" in url:
+                await safe_edit(sent, "🎵 Spotify playlist fetch ho rahi hai...")
+                queries = await get_playlist(url)
+                if not queries:
+                    await safe_edit(sent, "❌ Spotify playlist nahi mili!")
+                    return
+                spotify_tracks = []
+                for query in queries[:config.PLAYLIST_LIMIT]:
+                    track = await yt.search(query, sent.id)
+                    if track:
+                        track.user = mention
+                        spotify_tracks.append(track)
+                if not spotify_tracks:
+                    await safe_edit(sent, "❌ Koi track nahi mila YouTube pe!")
+                    return
+                file = spotify_tracks[0]
+                tracks = spotify_tracks[1:]
+                file.message_id = sent.id
+            else:
+                await safe_edit(sent, "🎵 Spotify se song dhundh raha hoon...")
+                query = await get_track(url)
+                if not query:
+                    await safe_edit(sent, "❌ Spotify track nahi mila!")
+                    return
+                file = await yt.search(query, sent.id, video=video)
+
+        elif "playlist" in url:
             await safe_edit(sent, m.lang["playlist_fetch"])
             try:
                 tracks = await yt.playlist(
@@ -255,10 +234,8 @@ async def play_hndlr(
     if not file:
         return
 
-    # Set video attribute in file
     file.video = video
 
-    # Skip duration check for live streams
     if not file.is_live and file.duration_sec > config.DURATION_LIMIT:
         await safe_edit(
             sent,
@@ -273,16 +250,13 @@ async def play_hndlr(
     if force:
         queue.force_add(chat_id, file)
     else:
-        position = queue.add(chat_id, file)  # Returns 0-based index
+        position = queue.add(chat_id, file)
 
         if await db.get_call(chat_id):
-            # When call is active, position 0 is currently playing
-            # So actual waiting position is: position (e.g., 1st waiting = index 1)
-            # Display as 1-based for users: index 1 → "1st in queue"
             await safe_edit(
                 sent,
                 m.lang["play_queued"].format(
-                    position,  # Shows waiting position: 1, 2, 3...
+                    position,
                     file.url,
                     file.title,
                     file.duration,
@@ -300,15 +274,12 @@ async def play_hndlr(
                         text=m.lang["playlist_queued"].format(len(tracks)) + added,
                     )
                 except Exception:
-                    # Can't send message, continue anyway
                     pass
             
-            # ✨ NEW: Start preloading queued tracks in background
             try:
                 from Elevenyts import preload
                 asyncio.create_task(preload.start_preload(chat_id, count=2))
             except Exception:
-                # Non-critical, continue without preload
                 pass
             
             return
@@ -326,19 +297,16 @@ async def play_hndlr(
             )
 
     try:
-        # Pass message_chat_id only if it's different from chat_id (channel play mode)
         await tune.play_media(
             chat_id=chat_id, 
             message=sent, 
             media=file, 
             message_chat_id=message_chat_id if chat_id != message_chat_id else None
         )
-        # React with emoji on successful play
         try:
             emoji = m.lang["play_emoji"]
             await m.react(emoji)
         except Exception:
-            # If reaction fails, continue anyway (not critical)
             pass
     except Exception as e:
         error_msg = str(e)
@@ -359,6 +327,7 @@ async def play_hndlr(
                 f"Support: {config.SUPPORT_CHAT}</blockquote>"
             )
         return
+
     if not tracks:
         return
     added = playlist_to_queue(chat_id, tracks)
@@ -368,5 +337,4 @@ async def play_hndlr(
             text=m.lang["playlist_queued"].format(len(tracks)) + added,
         )
     except Exception:
-        # Can't send message, but playback is working
         pass
