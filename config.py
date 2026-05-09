@@ -63,8 +63,8 @@ class Config:
 
         # ============ IMAGE URLS — ALL LISTS FOR RANDOM ============
         self.DEFAULT_THUMBS: List[str] = [
-            "https://i.pinimg.com/550x/fc/48/c6/fc48c6e50f85375fdaadb987b9aaca09.jpg",
-            "https://i.pinimg.com/550x/fc/48/c6/fc48c6e50f85375fdaadb987b9aaca09.jpg",
+            "https://drive.google.com/uc?id=165bJ_UImzvD6Xn5_ndrjpL6OdxWS5HYS",
+            
         ]
 
         self.PING_IMGS: List[str] = [
