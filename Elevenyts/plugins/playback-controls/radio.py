@@ -4,7 +4,6 @@ import aiohttp
 import random
 
 from pyrogram import filters, types
-from pyrogram.errors import ChatSendPlainForbidden, ChatWriteForbidden
 
 from Elevenyts import app, db, lang, tune
 from Elevenyts.helpers import can_manage_vc
@@ -17,7 +16,6 @@ RADIO_API = "https://de1.api.radio-browser.info/json"
 
 
 async def _search_stations(query: str = None, country: str = None, tag: str = None, limit: int = 10) -> list[dict]:
-    """Radio Browser API se stations dhundo."""
     try:
         params = {
             "limit": limit,
@@ -57,30 +55,38 @@ def _clear_radio_state(chat_id: int) -> None:
 
 
 async def _radio_loop(chat_id: int, station: dict) -> None:
-    """Radio stream bajao."""
     state = RADIO_STATE.get(chat_id)
     if not state:
         return
 
     stream_url = station.get("url_resolved") or station.get("url")
-    name = station.get("name", "Radio")
-    country = station.get("country", "")
+    name = station.get("name", "Radio").strip()
+    country = station.get("country", "🌐 Unknown")
     tags = station.get("tags", "")
+    genre = tags[:40] if tags else "Unknown"
+    votes = station.get("votes", 0)
+    clickcount = station.get("clickcount", 0)
 
     try:
         await app.send_message(
             chat_id,
-            f"📻 **Radio Started!**\n\n"
-            f"🎙 **Station:** {name}\n"
-            f"🌍 **Country:** {country}\n"
-            f"🎵 **Genre:** {tags[:50] if tags else 'Unknown'}\n\n"
-            f"_Use /radio stop to stop_"
+            f"<blockquote>"
+            f"📻 <b>Radio Started!</b>"
+            f"</blockquote>\n\n"
+            f"<blockquote>"
+            f"🎙 <b>Station:</b> {name}\n"
+            f"🌍 <b>Country:</b> {country}\n"
+            f"🎵 <b>Genre:</b> {genre}\n"
+            f"👍 <b>Votes:</b> {votes} · 🎧 <b>Plays:</b> {clickcount}"
+            f"</blockquote>\n\n"
+            f"<blockquote>"
+            f"⏹ <i>Use /radio stop to stop the radio</i>"
+            f"</blockquote>"
         )
     except:
         pass
 
     from Elevenyts.helpers import Media
-    import time
 
     media = Media(
         id=f"radio_{station.get('stationuuid', 'live')}",
@@ -101,12 +107,19 @@ async def _radio_loop(chat_id: int, station: dict) -> None:
         logger.error(f"Radio play error: {e}")
         _clear_radio_state(chat_id)
         try:
-            await app.send_message(chat_id, f"❌ Radio stream error: {e}")
+            await app.send_message(
+                chat_id,
+                f"<blockquote>"
+                f"❌ <b>Radio Error!</b>\n\n"
+                f"Stream load nahi ho saka.\n"
+                f"<code>{e}</code>\n\n"
+                f"Doosra station try karo: /radio {genre}"
+                f"</blockquote>"
+            )
         except:
             pass
         return
 
-    # Active rahne tak wait karo
     while state.get("active"):
         await asyncio.sleep(5)
         if not await db.get_call(chat_id):
@@ -122,46 +135,61 @@ async def _radio_loop(chat_id: int, station: dict) -> None:
 async def radio_command(_, m: types.Message):
     args = m.command[1:]
 
-    # Stop command
     if args and args[0].lower() == "stop":
         if m.chat.id not in RADIO_STATE:
-            return await m.reply_text("📻 Abhi koi radio nahi chal raha.")
+            return await m.reply_text(
+                "<blockquote>📻 <b>Radio</b>\n\nAbhi koi radio nahi chal raha.</blockquote>"
+            )
         _clear_radio_state(m.chat.id)
         await tune.stop(m.chat.id)
-        return await m.reply_text("📻 Radio stop kar diya.")
+        return await m.reply_text(
+            "<blockquote>⏹ <b>Radio Stopped!</b>\n\nRadio band kar diya gaya.</blockquote>"
+        )
 
-    # Usage
     if not args:
         return await m.reply_text(
-            "📻 **Radio Usage:**\n\n"
-            "`/radio bollywood` — Bollywood stations\n"
-            "`/radio hindi` — Hindi stations\n"
-            "`/radio jazz` — Jazz stations\n"
-            "`/radio pop` — Pop stations\n"
-            "`/radio stop` — Radio band karo\n\n"
-            "Koi bhi genre ya station naam likho!"
+            "<blockquote>"
+            "📻 <b>Radio — Usage</b>"
+            "</blockquote>\n\n"
+            "<blockquote>"
+            "🎵 <b>Genre se search:</b>\n"
+            "<code>/radio bollywood</code> — Bollywood\n"
+            "<code>/radio hindi</code> — Hindi\n"
+            "<code>/radio jazz</code> — Jazz\n"
+            "<code>/radio lofi</code> — Lo-Fi\n"
+            "<code>/radio pop</code> — Pop\n"
+            "<code>/radio classical</code> — Classical"
+            "</blockquote>\n\n"
+            "<blockquote>"
+            "⏹ <code>/radio stop</code> — Radio band karo\n\n"
+            "<i>Koi bhi genre ya station naam likho!</i>"
+            "</blockquote>"
         )
 
     query = " ".join(args).strip()
 
-    # Existing radio stop karo
     if m.chat.id in RADIO_STATE:
         _clear_radio_state(m.chat.id)
         await tune.stop(m.chat.id)
 
-    status = await m.reply_text(f"🔍 **{query}** ke liye radio stations dhundh raha hoon...")
+    status = await m.reply_text(
+        f"<blockquote>🔍 <b>Searching...</b>\n\n<i>{query}</i> ke liye stations dhundh raha hoon...</blockquote>"
+    )
 
-    # Stations search karo
     stations = await _search_stations(tag=query, limit=20)
     if not stations:
         stations = await _search_stations(query=query, limit=20)
 
     if not stations:
-        return await status.edit(f"❌ **{query}** ke liye koi station nahi mila!")
+        return await status.edit(
+            f"<blockquote>"
+            f"❌ <b>Station Nahi Mila!</b>\n\n"
+            f"<i>{query}</i> ke liye koi station nahi mila.\n"
+            f"Doosra genre try karo jaise: <code>hindi</code>, <code>bollywood</code>, <code>lofi</code>"
+            f"</blockquote>"
+        )
 
-    # Random station choose karo
     station = random.choice(stations)
-
     await status.delete()
 
     RADIO_STATE[m.chat.id] = {
