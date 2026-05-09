@@ -68,11 +68,12 @@ class Config:
         ]
 
         self.PING_IMGS: List[str] = [
-            "https://i.pinimg.com/550x/fc/48/c6/fc48c6e50f85375fdaadb987b9aaca09.jpg",
-            "https://i.pinimg.com/550x/fc/48/c6/fc48c6e50f85375fdaadb987b9aaca09.jpg",
+            "https://drive.google.com/uc?id=165bJ_UImzvD6Xn5_ndrjpL6OdxWS5HYS",
+            
         ]
 
         self.START_IMGS: List[str] = [
+            "https://drive.google.com/uc?id=165bJ_UImzvD6Xn5_ndrjpL6OdxWS5HYS",
             "https://i.pinimg.com/550x/fc/48/c6/fc48c6e50f85375fdaadb987b9aaca09.jpg",
             "https://img.freepik.com/premium-photo/anime-girl-listening-music-while-sitting-table-with-drink-generative-ai_733139-40138.jpg",
             "https://motionbgs.com/media/5785/goth-anime-girl.jpg",
@@ -83,8 +84,7 @@ class Config:
         ]
 
         self.RADIO_IMGS: List[str] = [
-            "https://i.pinimg.com/550x/fc/48/c6/fc48c6e50f85375fdaadb987b9aaca09.jpg",
-            "https://i.pinimg.com/550x/fc/48/c6/fc48c6e50f85375fdaadb987b9aaca09.jpg",
+            "https://drive.google.com/uc?id=165bJ_UImzvD6Xn5_ndrjpL6OdxWS5HYS",
         ]
 
         # Single values — random pick karo (DEFAULT_THUMB ke liye)
