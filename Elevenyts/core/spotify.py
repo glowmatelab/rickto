@@ -20,16 +20,20 @@ async def get_track(url: str) -> str | None:
         match = SPOTIFY_REGEX.match(url)
         if not match:
             return None
-        
+
         sp_type = match.group(1)
         sp_id = match.group(2)
 
         if sp_type == "track":
-            data = sp.track(sp_id, market="IN")
-            title = data["name"]
-            artist = data["artists"][0]["name"]
+            # sp.track() ki jagah sp.search() use karo
+            results = sp.search(q=f"spotify:track:{sp_id}", type="track", limit=1)
+            items = results["tracks"]["items"]
+            if not items:
+                return None
+            title = items[0]["name"]
+            artist = items[0]["artists"][0]["name"]
             return f"{title} {artist}"
-        
+
         return None
     except Exception:
         return None
@@ -60,6 +64,28 @@ async def get_playlist(url: str) -> list[str]:
             for track in results["items"]:
                 title = track["name"]
                 queries.append(f"{title} {album_artist}")
+
+        return queries
+    except Exception:
+        return []
+
+async def get_recommendations(seed_query: str) -> list[str]:
+    try:
+        # Pehle seed track dhundo
+        results = sp.search(q=seed_query, type="track", limit=1)
+        items = results["tracks"]["items"]
+        if not items:
+            return []
+
+        seed_track_id = items[0]["id"]
+
+        # Similar songs lo
+        recs = sp.recommendations(seed_tracks=[seed_track_id], limit=5)
+        queries = []
+        for track in recs["tracks"]:
+            title = track["name"]
+            artist = track["artists"][0]["name"]
+            queries.append(f"{title} {artist}")
 
         return queries
     except Exception:
