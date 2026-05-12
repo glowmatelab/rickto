@@ -11,3 +11,4 @@ yt-dlp[default]>=2026.3.3
 ffmpeg
 Pillow
 ytmusicapi
+instaloader
