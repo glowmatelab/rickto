@@ -137,7 +137,7 @@ async def download_instagram(url: str, audio_only: bool = False) -> str | None:
 #  /download ᴄᴏᴍᴍᴀɴᴅ
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-@app.on_message(filters.command("download") & filters.group)
+@app.on_message(filters.command("download") & (filters.group | filters.private))
 async def download_cmd(_, message: Message):
     link = extract_link(message)
 
