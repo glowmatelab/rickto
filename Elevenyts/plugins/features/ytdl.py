@@ -76,60 +76,6 @@ def extract_ig_shortcode(url: str):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  ʏᴏᴜᴛᴜʙᴇ ᴅᴏᴡɴʟᴏᴀᴅ ᴠɪᴀ ʏᴛ-ᴅʟᴘ  (ʀᴇꜱᴏʟᴜᴛɪᴏɴ)
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-# Resolution map: key → (format_selector, label)
-YT_RESOLUTIONS = {
-    "360": "bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/best[height<=360][ext=mp4]/best[height<=360]",
-    "720": "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]",
-    "1080": "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[height<=1080]",
-}
-
-
-async def download_youtube_video(video_id: str, resolution: str) -> str | None:
-    os.makedirs("downloads", exist_ok=True)
-
-    out_path = f"downloads/yt_{video_id}_{resolution}p.mp4"
-    url = f"https://www.youtube.com/watch?v={video_id}"
-
-    if os.path.exists(out_path):
-        return out_path
-
-    fmt = YT_RESOLUTIONS.get(resolution, YT_RESOLUTIONS["720"])
-
-    cmd = [
-        "yt-dlp",
-        "--no-playlist",
-        "-f", fmt,
-        "--merge-output-format", "mp4",
-        "-o", out_path,
-        url,
-    ]
-
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
-
-        if proc.returncode == 0 and os.path.exists(out_path):
-            return out_path
-        else:
-            logger.error(f"yt-dlp video error: {stderr.decode()[-300:]}")
-            return None
-
-    except asyncio.TimeoutError:
-        logger.error("YouTube video download timeout")
-        return None
-    except Exception as e:
-        logger.error(f"YouTube video download error: {e}")
-        return None
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  ɪɴsᴛᴀɢʀᴀᴍ ᴅᴏᴡɴʟᴏᴀᴅ ᴠɪᴀ ʏᴛ-ᴅʟᴘ
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -152,8 +98,8 @@ async def download_instagram(url: str, audio_only: bool = False) -> str | None:
             "--no-playlist",
             "-x",
             "--audio-format", "mp3",
-            "--audio-quality", "192K",                         # ✅ FIX: VBR "0" ki jagah fixed 192K
-            "--postprocessor-args", "ffmpeg:-ar 44100 -ac 2",  # ✅ FIX: sample rate + stereo force
+            "--audio-quality", "192K",                        # FIX: VBR "0" ki jagah fixed 192K
+            "--postprocessor-args", "ffmpeg:-ar 44100 -ac 2", # FIX: sample rate + stereo force
             "-o", out_path,
             url,
         ]
@@ -224,15 +170,10 @@ async def download_cmd(_, message: Message):
             )
             return
 
-        # Resolution buttons + Audio
         markup = InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("📱  360p", callback_data=f"ytdl_360_{video_id}"),
-                InlineKeyboardButton("🖥  720p", callback_data=f"ytdl_720_{video_id}"),
-                InlineKeyboardButton("🎞  1080p", callback_data=f"ytdl_1080_{video_id}"),
-            ],
-            [
-                InlineKeyboardButton("𝄞  ᴀᴜᴅɪᴏ ᴏɴʟʏ", callback_data=f"ytdl_audio_{video_id}"),
+                InlineKeyboardButton("𝄞  ᴀᴜᴅɪᴏ", callback_data=f"ytdl_audio_{video_id}"),
+                InlineKeyboardButton("⬡  ᴠɪᴅᴇᴏ", callback_data=f"ytdl_video_{video_id}"),
             ],
             [InlineKeyboardButton("✕  ᴄᴀɴᴄᴇʟ", callback_data="ytdl_cancel")],
         ])
@@ -278,7 +219,7 @@ async def download_cmd(_, message: Message):
 #  ᴄᴀʟʟʙᴀᴄᴋ  —  ʏᴏᴜᴛᴜʙᴇ
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-@app.on_callback_query(filters.regex(r"^ytdl_(audio|360|720|1080|cancel)_?(.*)$"))
+@app.on_callback_query(filters.regex(r"^ytdl_(audio|video|cancel)_?(.*)$"))
 async def ytdl_callback(_, query: CallbackQuery):
     data = query.data
 
@@ -292,17 +233,14 @@ async def ytdl_callback(_, query: CallbackQuery):
         await query.answer("ɪɴᴠᴀʟɪᴅ ʀᴇqᴜᴇꜱᴛ", show_alert=True)
         return
 
-    mode = parts[1]       # "audio" | "360" | "720" | "1080"
+    is_video = parts[1] == "video"
     video_id = parts[2]
-    is_audio = mode == "audio"
 
     await query.answer("ᴘʟᴇᴀꜱᴇ ᴡᴀɪᴛ...")
 
-    label = "ᴀᴜᴅɪᴏ" if is_audio else f"{mode}ᴘ ᴠɪᴅᴇᴏ"
-
     status = await query.message.edit_text(
         "<blockquote>"
-        f"⏳  ʏᴏᴜᴛᴜʙᴇ  {label}  ᴅᴏᴡɴʟᴏᴀᴅɪɴɢ...\n\n"
+        f"⏳  ʏᴏᴜᴛᴜʙᴇ  {'ᴠɪᴅᴇᴏ' if is_video else 'ᴀᴜᴅɪᴏ'}  ᴅᴏᴡɴʟᴏᴀᴅɪɴɢ...\n\n"
         f"🆔  <code>{video_id}</code>"
         "</blockquote>",
         parse_mode=enums.ParseMode.HTML,
@@ -310,12 +248,7 @@ async def ytdl_callback(_, query: CallbackQuery):
 
     file_path = None
     try:
-        if is_audio:
-            # Purana yt helper use karo audio ke liye
-            file_path = await yt.download(video_id=video_id, is_live=False, video=False)
-        else:
-            # Naya resolution-based download
-            file_path = await download_youtube_video(video_id, resolution=mode)
+        file_path = await yt.download(video_id=video_id, is_live=False, video=is_video)
 
         if not file_path or not os.path.exists(file_path):
             await status.edit_text(
@@ -327,7 +260,7 @@ async def ytdl_callback(_, query: CallbackQuery):
             )
             return
 
-        await _send_file(query, status, file_path, not is_audio, "ʏᴏᴜᴛᴜʙᴇ", label)
+        await _send_file(query, status, file_path, is_video, "ʏᴏᴜᴛᴜʙᴇ")
 
     except Exception as e:
         logger.error(f"ytdl error: {e}")
@@ -378,8 +311,7 @@ async def igdl_callback(_, query: CallbackQuery):
             )
             return
 
-        label = "ᴠɪᴅᴇᴏ" if is_video else "ᴀᴜᴅɪᴏ"
-        await _send_file(query, status, file_path, is_video, "ɪɴsᴛᴀɢʀᴀᴍ", label)
+        await _send_file(query, status, file_path, is_video, "ɪɴsᴛᴀɢʀᴀᴍ")
 
     except Exception as e:
         logger.error(f"igdl error: {e}")
@@ -398,22 +330,14 @@ async def igdl_callback(_, query: CallbackQuery):
 #  ꜱʜᴀʀᴇᴅ ʜᴇʟᴘᴇʀꜱ
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-async def _send_file(
-    query: CallbackQuery,
-    status,
-    file_path: str,
-    is_video: bool,
-    source: str,
-    label: str,
-):
+async def _send_file(query: CallbackQuery, status, file_path: str, is_video: bool, source: str):
     size_mb = os.path.getsize(file_path) / (1024 * 1024)
 
     if size_mb > 50:
         await status.edit_text(
             "<blockquote>"
             f"❌  ꜰɪʟᴇ ᴛᴏᴏ ʟᴀʀɢᴇ  ({size_mb:.1f} MB)\n\n"
-            "ᴛᴇʟᴇɢʀᴀᴍ ʙᴏᴛ ᴀᴘɪ ᴀʟʟᴏᴡꜱ ᴍᴀx  50 MB.\n"
-            "ᴋᴏɪ ᴄʜᴏᴛɪ ʀᴇꜱᴏʟᴜᴛɪᴏɴ ᴛʀʏ ᴋᴀʀᴏ  (360ᴘ / 720ᴘ)"
+            "ᴛᴇʟᴇɢʀᴀᴍ ʙᴏᴛ ᴀᴘɪ ᴀʟʟᴏᴡꜱ ᴍᴀx  50 MB."
             "</blockquote>",
             parse_mode=enums.ParseMode.HTML,
         )
@@ -421,7 +345,7 @@ async def _send_file(
 
     await status.edit_text(
         "<blockquote>"
-        f"📤  ᴜᴘʟᴏᴀᴅɪɴɢ  {label}...\n\n"
+        f"📤  ᴜᴘʟᴏᴀᴅɪɴɢ...\n\n"
         f"📦  <code>{size_mb:.1f} MB</code>"
         "</blockquote>",
         parse_mode=enums.ParseMode.HTML,
@@ -429,7 +353,7 @@ async def _send_file(
 
     caption = (
         "<blockquote>"
-        f"{'🎬' if is_video else '🎵'}  {source}  —  {label}\n\n"
+        f"{'🎬' if is_video else '🎵'}  {source}\n\n"
         f"📦  {size_mb:.1f} MB"
         "</blockquote>"
     )
