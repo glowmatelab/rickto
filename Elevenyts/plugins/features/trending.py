@@ -1,6 +1,7 @@
 # Elevenyts/plugins/features/trending_recommend.py
 # YouTube Music Trending + Recommend
 
+import asyncio
 import logging
 from pyrogram import filters, enums
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
@@ -16,26 +17,50 @@ _ytm = YTMusic()
 #  ʜᴇʟᴘᴇʀꜱ
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def _get_trending(limit: int = 10) -> list[dict]:
-    """India ke top trending songs fetch karo."""
+async def _get_trending(limit: int = 10) -> list[dict]:
+    """yt-dlp se YouTube Music India trending fetch karo."""
     try:
-        charts = _ytm.get_charts(country="IN")
-        items = charts.get("songs", {}).get("items", [])
+        # YouTube Music India Top Songs chart playlist
+        cmd = [
+            "yt-dlp",
+            "--flat-playlist",
+            "--dump-json",
+            "--no-warnings",
+            "--playlist-end", str(limit),
+            "https://music.youtube.com/playlist?list=PLrEnWoR732-BHrPp_Pm8_VleD68f9s14-",
+        ]
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
+
+        import json
         result = []
-        for item in items[:limit]:
-            title   = item.get("title", "Unknown")
-            artists = ", ".join(a["name"] for a in item.get("artists", []))
-            vid_id  = item.get("videoId", "")
-            views   = item.get("views", "")
-            result.append({
-                "title":   title,
-                "artists": artists,
-                "videoId": vid_id,
-                "views":   views,
-            })
+        for line in stdout.decode().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                d = json.loads(line)
+                title    = d.get("title", "Unknown")
+                uploader = d.get("uploader") or d.get("channel") or ""
+                vid_id   = d.get("id") or d.get("url", "").split("v=")[-1]
+                result.append({
+                    "title":   title,
+                    "artists": uploader,
+                    "videoId": vid_id,
+                })
+            except Exception:
+                continue
         return result
+
+    except asyncio.TimeoutError:
+        logger.error("trending timeout")
+        return []
     except Exception as e:
-        logger.error(f"trending fetch error: {e}")
+        logger.error(f"trending error: {e}")
         return []
 
 
@@ -50,9 +75,8 @@ def _get_recommendations(query: str, limit: int = 8) -> list[dict]:
         if not video_id:
             return []
 
-        # related songs via watch playlist
-        watch = _ytm.get_watch_playlist(videoId=video_id, limit=limit + 1)
-        tracks = watch.get("tracks", [])[1:limit + 1]  # skip first (same song)
+        watch  = _ytm.get_watch_playlist(videoId=video_id, limit=limit + 1)
+        tracks = watch.get("tracks", [])[1:limit + 1]
 
         recs = []
         for t in tracks:
@@ -66,7 +90,7 @@ def _get_recommendations(query: str, limit: int = 8) -> list[dict]:
             })
         return recs
     except Exception as e:
-        logger.error(f"recommend fetch error: {e}")
+        logger.error(f"recommend error: {e}")
         return []
 
 
@@ -82,7 +106,7 @@ async def trending_cmd(_, message: Message):
         parse_mode=enums.ParseMode.HTML,
     )
 
-    songs = _get_trending(limit=10)
+    songs = await _get_trending(limit=10)
 
     if not songs:
         await status.edit_text(
@@ -95,14 +119,13 @@ async def trending_cmd(_, message: Message):
     buttons = []
     for i, s in enumerate(songs, 1):
         lines.append(
-            f"  <b>{i}.</b>  {s['title']}\n"
-            f"       <i>{s['artists']}</i>"
-            + (f"\n       👁  {s['views']}" if s['views'] else "")
+            f"  <b>{i}.</b>  {s['title']}"
+            + (f"\n       <i>{s['artists']}</i>" if s['artists'] else "")
         )
         if s["videoId"]:
             buttons.append([
                 InlineKeyboardButton(
-                    f"{i}. {s['title'][:30]}",
+                    f"{i}. {s['title'][:35]}",
                     url=f"https://www.youtube.com/watch?v={s['videoId']}",
                 )
             ])
@@ -151,7 +174,9 @@ async def recommend_cmd(_, message: Message):
         parse_mode=enums.ParseMode.HTML,
     )
 
-    songs = _get_recommendations(query, limit=8)
+    songs = await asyncio.get_event_loop().run_in_executor(
+        None, _get_recommendations, query, 8
+    )
 
     if not songs:
         await status.edit_text(
@@ -173,7 +198,7 @@ async def recommend_cmd(_, message: Message):
         if s["videoId"]:
             buttons.append([
                 InlineKeyboardButton(
-                    f"{i}. {s['title'][:30]}",
+                    f"{i}. {s['title'][:35]}",
                     url=f"https://www.youtube.com/watch?v={s['videoId']}",
                 )
             ])
