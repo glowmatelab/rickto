@@ -18,9 +18,7 @@ _ytm = YTMusic()
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 async def _get_trending(limit: int = 10) -> list[dict]:
-    """yt-dlp se YouTube Music India trending fetch karo."""
     try:
-        # YouTube Music India Top Songs chart playlist
         cmd = [
             "yt-dlp",
             "--flat-playlist",
@@ -65,7 +63,6 @@ async def _get_trending(limit: int = 10) -> list[dict]:
 
 
 def _get_recommendations(query: str, limit: int = 8) -> list[dict]:
-    """Song name se similar songs fetch karo."""
     try:
         results = _ytm.search(query, filter="songs", limit=1)
         if not results:
@@ -130,11 +127,11 @@ async def trending_cmd(_, message: Message):
                 )
             ])
 
+    body = "\n\n".join(lines)
+
     text = (
-        "<blockquote>"
-        "🔥  ᴛʀᴇɴᴅɪɴɢ  —  🇮🇳 ɪɴᴅɪᴀ\n\n"
-        + "\n\n".join(lines)
-        + "\n</blockquote>"
+        "<blockquote>🔥  ᴛʀᴇɴᴅɪɴɢ  —  🇮🇳 ɪɴᴅɪᴀ</blockquote>\n"
+        f"<blockquote expandable>{body}</blockquote>"
     )
 
     await status.edit_text(
@@ -203,11 +200,11 @@ async def recommend_cmd(_, message: Message):
                 )
             ])
 
+    body = "\n\n".join(lines)
+
     text = (
-        "<blockquote>"
-        f"🎯  ꜱɪᴍɪʟᴀʀ ᴛᴏ  —  <b>{query}</b>\n\n"
-        + "\n\n".join(lines)
-        + "\n</blockquote>"
+        f"<blockquote>🎯  ꜱɪᴍɪʟᴀʀ ᴛᴏ  —  <b>{query}</b></blockquote>\n"
+        f"<blockquote expandable>{body}</blockquote>"
     )
 
     await status.edit_text(
