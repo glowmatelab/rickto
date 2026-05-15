@@ -81,10 +81,9 @@ async def lyrics_cmd(_, message: Message):
         return
 
     # ── API response parse ──
-    # Response format: { "name": "...", "artist": null|"...", "lyrics": "...", "by": "..." }
     lyrics = (data.get("lyrics") or "").strip()
     name   = (data.get("name")   or query).strip()
-    artist = (data.get("artist") or "").strip()  # null aa sakta hai
+    artist = (data.get("artist") or "").strip()
 
     if not lyrics:
         await status.edit_text(
@@ -98,33 +97,35 @@ async def lyrics_cmd(_, message: Message):
         return
 
     # ── header ──
-    header = "<blockquote>" + f"🎶  <b>{name}</b>"
+    header = f"🎶  <b>{name}</b>"
     if artist:
         header += f"\n🎤  <i>{artist}</i>"
-    header += "\n</blockquote>\n\n"
 
-    full_text = header + lyrics
+    # ── expandable blockquote mein lyrics ──
+    # Telegram limit: 4096 chars per message
+    # expandable blockquote mein sab ek hi message mein aata hai — no spam
+    full_text = (
+        f"<blockquote>{header}</blockquote>\n"
+        f"<blockquote expandable>{lyrics}</blockquote>"
+    )
 
-    # ── Telegram 4096 char limit handle ──
     if len(full_text) <= 4096:
         await status.edit_text(
             full_text,
             parse_mode=enums.ParseMode.HTML,
         )
     else:
+        # Bahut lambi lyrics — split karo, har part expandable
         await status.delete()
-        chunks = _split_text(lyrics, limit=4000)
+        chunks = _split_text(lyrics, limit=3800)
 
         for i, chunk in enumerate(chunks):
-            if i == 0:
-                text = header + chunk
-            else:
-                text = (
-                    "<blockquote>"
-                    f"🎶  <b>{name}</b>  —  ᴘᴀʀᴛ {i + 1}"
-                    "</blockquote>\n\n"
-                    + chunk
-                )
+            part_header = (
+                f"<blockquote>{header}  —  ᴘᴀʀᴛ {i + 1}/{len(chunks)}</blockquote>\n"
+                if i > 0 else
+                f"<blockquote>{header}</blockquote>\n"
+            )
+            text = part_header + f"<blockquote expandable>{chunk}</blockquote>"
             await message.reply_text(text, parse_mode=enums.ParseMode.HTML)
 
 
@@ -132,7 +133,7 @@ async def lyrics_cmd(_, message: Message):
 #  ʜᴇʟᴘᴇʀ
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def _split_text(text: str, limit: int = 4000) -> list[str]:
+def _split_text(text: str, limit: int = 3800) -> list[str]:
     """Long lyrics ko line breaks pe split karo."""
     chunks = []
     current = ""
