@@ -385,6 +385,15 @@ class TgCall(PyTgCalls):
                     if sent_photo:
                         media.message_id = sent_photo.id
 
+                # 👇 YE 6 LINES ADD KARO
+                try:
+                    from Elevenyts.plugins.settings.partymode import PARTY_STICKERS, party_chats
+                    if chat_id in party_chats:
+                        asyncio.create_task(app.send_sticker(target_chat_for_messages, random.choice(PARTY_STICKERS)))
+                except Exception:
+                    pass
+                # 👆 BAS ITNA
+
                 try:
                     asyncio.create_task(
                         preload.start_preload(chat_id, count=2))
