@@ -7,10 +7,34 @@ from Elevenyts import app
 async def info_handler(client, message):
     rep = message.reply_to_message
     status_msg = await message.reply_text("📡 Analyzing source...")
-
+    
     try:
-        # 1. Agar message kisi CHANNEL se forward kiya gaya hai
-        if rep.forward_from_chat:
+        # 1. Agar message ek STICKER hai
+        if rep.sticker:
+            sticker = rep.sticker
+            
+            # Sticker ka type pata karne ke liye
+            if sticker.is_animated:
+                st_type = "🎬 Animated (TGS)"
+            elif sticker.is_video:
+                st_type = "📹 Video (WEBM)"
+            else:
+                st_type = "🖼️ Static (PNG/WEBP)"
+
+            info_text = (
+                f"🎨 **Sticker Information**\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+                f"🆔 **Sticker ID:** `{sticker.file_id}`\n"
+                f"✨ **Emoji:** {sticker.emoji or 'None'}\n"
+                f"📦 **Pack Short Name:** `{sticker.set_name or 'None'}`\n"
+                f"⚙️ **Type:** {st_type}\n"
+                f"📏 **Size:** {sticker.width}x{sticker.height}\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+                f"💬 **Current Chat ID:** `{message.chat.id}`"
+            )
+
+        # 2. Agar message kisi CHANNEL se forward kiya gaya hai
+        elif rep.forward_from_chat:
             chat = rep.forward_from_chat
             info_text = (
                 f"📢 **Forwarded Channel Info**\n"
@@ -23,7 +47,7 @@ async def info_handler(client, message):
                 f"💬 **Current Chat ID:** `{message.chat.id}`"
             )
         
-        # 2. Agar message kisi USER ka hai
+        # 3. Agar message kisi USER ka hai
         elif rep.from_user:
             user = rep.from_user
             try:
@@ -35,7 +59,7 @@ async def info_handler(client, message):
             tag = "Standard User"
             if user.is_premium: tag = "💎 Premium"
             elif user.is_bot: tag = "🤖 Bot"
-
+            
             info_text = (
                 f"👤 **User Information**\n"
                 f"━━━━━━━━━━━━━━━━━━\n"
@@ -47,8 +71,8 @@ async def info_handler(client, message):
                 f"📍 **In Group:** {message.chat.title or 'Private'}\n"
                 f"🔢 **Group ID:** `{message.chat.id}`"
             )
-
-        # 3. Agar message khud ek CHANNEL ne bheja hai (Linked Channel in Groups)
+            
+        # 4. Agar message khud ek CHANNEL ne bheja hai (Linked Channel in Groups)
         elif rep.sender_chat:
             chat = rep.sender_chat
             info_text = (
@@ -62,9 +86,9 @@ async def info_handler(client, message):
             )
         else:
             info_text = "❌ I can't get info about this message."
-
+            
         await status_msg.edit(info_text)
-
+        
     except Exception as e:
         await status_msg.edit(f"❌ **Error:** `{str(e)}`")
 
