@@ -336,7 +336,7 @@ class TgCall(PyTgCalls):
                     else:
                         percentage = min((played / duration) * 100, 100)
                     filled = int(round(bar_length * percentage / 100))
-                    timer_bar = "▰" * filled + "▰" + "▱" * (bar_length - filled)
+                    timer_bar = "▬" * filled + "🛑" + "─" * (bar_length - filled)
                     if duration >= 3600:
                         played_time = time_module.strftime(
                             '%H:%M:%S', time_module.gmtime(played))
