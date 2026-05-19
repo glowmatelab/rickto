@@ -57,6 +57,7 @@ class Config:
         self.YOUTUBE_API_URL: str = getenv(
             "YOUTUBE_API_URL", "https://api.shrutibots.site")
         #"YOUTUBE_API_URL", "https://shrutibots.site")
+        self.SHRUTI_API_KEY: str = getenv("SHRUTI_API_KEY", "")
         # ============ SPOTIFY CONFIGURATION ============
         #self.SPOTIFY_CLIENT_ID: str = getenv("SPOTIFY_CLIENT_ID", "")
         #self.SPOTIFY_CLIENT_SECRET: str = getenv("SPOTIFY_CLIENT_SECRET", "")
