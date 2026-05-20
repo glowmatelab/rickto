@@ -15,7 +15,6 @@ from Elevenyts.helpers import Track, utils
 
 class YouTube:
     def __init__(self):
-        """Initialize YouTube handler with API configuration."""
         self.base = "https://www.youtube.com/watch?v="
         self.api_url = config.YOUTUBE_API_URL
         self.api_key = getattr(config, "SHRUTI_API_KEY", "")
@@ -32,15 +31,7 @@ class YouTube:
         self._download_semaphore = asyncio.Semaphore(5)
         self._max_video_height = getattr(config, "VIDEO_MAX_HEIGHT", 1080)
 
-    def _get_headers(self) -> dict:
-        """Return API headers with key if available."""
-        headers = {}
-        if self.api_key:
-            headers["x-api-key"] = self.api_key
-        return headers
-
     def _locate_download_file(self, video_id: str, video: bool = False) -> Optional[str]:
-        """Locate any completed download file for a video id."""
         pattern = f"downloads/{video_id}*"
         candidates = sorted([
             path for path in glob.glob(pattern)
@@ -70,11 +61,9 @@ class YouTube:
         return None
 
     def valid(self, url: str) -> bool:
-        """Check if URL is a valid YouTube URL."""
         return bool(re.match(self.regex, url))
 
     def url(self, message_1: types.Message) -> Union[str, None]:
-        """Extract YouTube URL from message."""
         messages = [message_1]
         link = None
         if message_1.reply_to_message:
@@ -100,7 +89,6 @@ class YouTube:
         return None
 
     async def search(self, query: str, m_id: int, video: bool = False, no_cache: bool = False) -> Track | None:
-        """Search for a video on YouTube."""
         cache_key = f"{query}_{video}"
         current_time = asyncio.get_running_loop().time()
 
@@ -151,7 +139,6 @@ class YouTube:
         return None
 
     async def playlist(self, limit: int, user: str, url: str) -> list[Track]:
-        """Extract playlist tracks."""
         try:
             plist = await Playlist.get(url)
             tracks = []
@@ -194,7 +181,6 @@ class YouTube:
             raise
 
     async def _download_via_api(self, video_id: str, video: bool = False) -> Optional[str]:
-        """Download audio/video using external API."""
         file_type = "video" if video else "audio"
         ext = "mp4" if video else "mp3"
         file_path = os.path.join("downloads", f"{video_id}.{ext}")
@@ -212,58 +198,28 @@ class YouTube:
                 return None
 
         try:
-            headers = self._get_headers()
             async with aiohttp.ClientSession() as session:
-                params = {"url": video_id, "type": file_type}
+                params = {"url": video_id, "type": file_type, "api_key": self.api_key}
 
                 async with session.get(
                     f"{self.api_url}/download",
                     params=params,
-                    headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=7)
+                    timeout=aiohttp.ClientTimeout(total=300)
                 ) as response:
                     if response.status != 200:
                         logger.error(f"❌ API request failed: HTTP {response.status}")
                         return None
 
-                    data = await response.json()
-                    download_token = data.get("download_token")
+                    with open(file_path, "wb") as f:
+                        async for chunk in response.content.iter_chunked(131072):
+                            f.write(chunk)
 
-                    if not download_token:
-                        logger.error("❌ No download token received from API")
-                        return None
-
-                stream_url = f"{self.api_url}/stream/{video_id}?type={file_type}&token={download_token}"
-
-                async with session.get(
-                    stream_url,
-                    headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=300)
-                ) as file_response:
-                    if file_response.status == 302:
-                        redirect_url = file_response.headers.get('Location')
-                        if redirect_url:
-                            async with session.get(redirect_url, headers=headers) as final_response:
-                                if final_response.status != 200:
-                                    logger.error(f"❌ Redirect failed: HTTP {final_response.status}")
-                                    return None
-                                with open(file_path, "wb") as f:
-                                    async for chunk in final_response.content.iter_chunked(16384):
-                                        f.write(chunk)
-                    elif file_response.status == 200:
-                        with open(file_path, "wb") as f:
-                            async for chunk in file_response.content.iter_chunked(16384):
-                                f.write(chunk)
-                    else:
-                        logger.error(f"❌ Download failed: HTTP {file_response.status}")
-                        return None
-
-                    if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-                        logger.info(f"✅ Downloaded: {video_id}.{ext}")
-                        return file_path
-                    else:
-                        logger.error(f"❌ Downloaded file is empty or missing: {file_path}")
-                        return None
+                if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+                    logger.info(f"✅ Downloaded: {video_id}.{ext}")
+                    return file_path
+                else:
+                    logger.error(f"❌ Downloaded file is empty or missing: {file_path}")
+                    return None
 
         except asyncio.TimeoutError:
             logger.error(f"❌ Download timeout for {video_id}")
@@ -278,18 +234,15 @@ class YouTube:
             return None
 
     async def download(self, video_id: str, is_live: bool = False, video: bool = False) -> Optional[str]:
-        """Download a video or audio from YouTube using API."""
         url = self.base + video_id
 
         if is_live:
             try:
-                headers = self._get_headers()
                 async with aiohttp.ClientSession() as session:
-                    params = {"url": video_id, "type": "live"}
+                    params = {"url": video_id, "type": "live", "api_key": self.api_key}
                     async with session.get(
                         f"{self.api_url}/live",
                         params=params,
-                        headers=headers,
                         timeout=aiohttp.ClientTimeout(total=10)
                     ) as response:
                         if response.status == 200:
