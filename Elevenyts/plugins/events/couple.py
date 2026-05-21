@@ -29,9 +29,8 @@ def download_image(url, path):
         pass
     return path
 
-DEFAULT_PFP = "https://drive.google.com/uc?id=1MXl7iZ0SoAp-SFdNMSj30LUDbg-ea-ac"
-COUPLE_BG   = "https://drive.google.com/uc?id=1auUwGsx62_ThFIfGAjIjqYJLDY51qh0P"
-
+DEFAULT_PFP = "https://drive.google.com/uc?export=download&id=1MXl7iZ0SoAp-SFdNMSj30LUDbg-ea-ac"
+COUPLE_BG   = "https://drive.google.com/uc?export=download&id=1auUwGsx62_ThFIfGAjIjqYJLDY51qh0P"
 
 async def make_and_upload(app, c1_id, c2_id, chat_id) -> str:
     """Image banao, Telegraph pe upload karo, local file delete karo, URL return karo."""
