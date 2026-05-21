@@ -12,3 +12,4 @@ ffmpeg
 Pillow
 ytmusicapi
 instaloader
+pytz
