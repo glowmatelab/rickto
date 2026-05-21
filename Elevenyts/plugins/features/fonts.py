@@ -2432,7 +2432,7 @@ async def font_nxt(c, m):
     if not text:
         return await m.answer("Text nahi mila!", show_alert=True)
 
-    if m.data.startswith("fnxt+"):
+    if not m.data.startswith("fnxt+back+"):
         buttons = [
             [
                 InlineKeyboardButton("🇸 🇵 🇪 🇨 🇮 🇦 🇱", callback_data=f"style+special+{text}"),
