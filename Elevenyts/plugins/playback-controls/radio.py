@@ -95,7 +95,7 @@ async def _radio_loop(chat_id: int, station: dict) -> None:
         file_path=stream_url,
         message_id=0,
         title=name[:60],
-        url=stream_url,
+        url=f"https://t.me/{app.username}",  # ← Stream URL ki jagah bot link do
         user="📻 Radio",
         is_live=True,
         video=False,
