@@ -1,10 +1,7 @@
 import random
-
 from pyrogram import enums, errors, filters, types
-
 from Elevenyts import app, config, db, lang
 from Elevenyts.helpers import buttons, utils
-
 
 @app.on_message(filters.command(["help"]) & filters.private & ~app.bl_users)
 @lang.language()
@@ -29,13 +26,17 @@ async def _help(_, m: types.Message):
             quote=True,
         )
 
+    try:
+        await m.react("🎶")
+    except Exception:
+        pass
+
 
 @app.on_message(filters.command(["start"]))
 @lang.language()
 async def start(_, message: types.Message):
     """
     Handle /start command - welcome message for users.
-
     - In private chat: Shows welcome message with inline buttons
     - In group chat: Shows short welcome message
     - Adds new users to database
@@ -78,6 +79,11 @@ async def start(_, message: types.Message):
             reply_markup=key,
             quote=not private,
         )
+
+    try:
+        await message.react("🎵")
+    except Exception:
+        pass
 
     if private:
         if await db.is_user(message.from_user.id):
