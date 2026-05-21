@@ -2,21 +2,19 @@ from pyrogram import filters
 from pyrogram.raw.functions.channels import GetFullChannel
 from pyrogram.raw.functions.phone import CreateGroupCall, DiscardGroupCall
 from pyrogram.types import Message
-
 from Elevenyts import app, db
 from Elevenyts.helpers._admins import admin_check
-
 
 @app.on_message(filters.command(["vcstart", "startvc"]) & filters.group)
 @admin_check
 async def start_vc(_, m: Message):
     chat_id = m.chat.id
     msg = await m.reply("<b>⏳ Voice Chat start ho rahi hai...</b>")
-
     try:
-        assistant = await db.get_assistant(chat_id)
+        assistant = await db.get_client(chat_id)  # ✅ FIX: get_assistant → get_client
+        if not assistant:
+            return await msg.edit_text("<b>❌ Assistant available nahi hai!</b>\nSTRING_SESSION check karo .env mein.")
         peer = await assistant.resolve_peer(chat_id)
-
         await assistant.invoke(
             CreateGroupCall(
                 peer=peer,
@@ -24,7 +22,6 @@ async def start_vc(_, m: Message):
             )
         )
         await msg.edit_text("<b>🎧 Voice Chat Successfully Start Ho Gayi!</b>")
-
     except Exception as e:
         err = str(e)
         if "GROUPCALL_ALREADY_STARTED" in err:
@@ -36,29 +33,24 @@ async def start_vc(_, m: Message):
                 f"<b>Fix:</b> Assistant ko group mein admin banao aur VC permission do."
             )
 
-
 @app.on_message(filters.command(["vcend", "endvc"]) & filters.group)
 @admin_check
 async def end_vc(_, m: Message):
     chat_id = m.chat.id
     msg = await m.reply("<b>⏳ Voice Chat band ho rahi hai...</b>")
-
     try:
-        assistant = await db.get_assistant(chat_id)
+        assistant = await db.get_client(chat_id)  # ✅ FIX: get_assistant → get_client
+        if not assistant:
+            return await msg.edit_text("<b>❌ Assistant available nahi hai!</b>\nSTRING_SESSION check karo .env mein.")
         peer = await assistant.resolve_peer(chat_id)
-
-        # Pehle current group call fetch karo
         full_chat = await assistant.invoke(
             GetFullChannel(channel=peer)
         )
-
         group_call = full_chat.full_chat.call
         if not group_call:
             return await msg.edit_text("<b>⚠️ Koi Voice Chat chal nahi rahi!</b>")
-
         await assistant.invoke(DiscardGroupCall(call=group_call))
         await msg.edit_text("<b>🔇 Voice Chat Successfully Band Ho Gayi!</b>")
-
     except Exception as e:
         err = str(e)
         if "GROUPCALL_FORBIDDEN" in err:
