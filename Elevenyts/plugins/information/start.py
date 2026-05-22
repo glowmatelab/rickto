@@ -113,6 +113,16 @@ async def settings(_, message: types.Message):
         quote=True,
     )
 
+@app.on_message(filters.text & (filters.regex(r"(?i)picoo") | filters.mentioned))
+async def picoo_react(_, message: types.Message):
+    try:
+        await message.react("❤️")
+    except Exception:
+        pass
+    try:
+        await message.reply_text("la la la la 🎵")
+    except Exception:
+        pass
 
 @app.on_message(filters.new_chat_members, group=7)
 @lang.language()
