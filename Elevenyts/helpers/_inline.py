@@ -86,7 +86,8 @@ class Inline:
                 ],
                 [
                 # ✅ Naya button
-                self.ikb(text="⚡  ᴀᴅᴠᴀɴᴄᴇ", callback_data="help_advance", style=enums.ButtonStyle.DANGER),
+                    self.ikb(text="⚡  ᴀᴅᴠᴀɴᴄᴇ", callback_data="help_advance", style=enums.ButtonStyle.DANGER),
+                    self.ikb(text="⚙️ ᴏᴘᴛɪᴏɴꜱ", callback_data="help_options", style=enums.ButtonStyle.PRIMARY),
                 ],
                 [
                     self.ikb(text="ʙᴀᴄᴋ", callback_data="start"),
