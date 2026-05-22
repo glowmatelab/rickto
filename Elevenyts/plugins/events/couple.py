@@ -1,3 +1,4 @@
+import os
 import random
 import pytz
 from datetime import datetime, timedelta
@@ -6,6 +7,15 @@ from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 from Elevenyts import app
 
 couple_cache = {}
+
+COUPLE_IMAGES = [
+    "https://drive.google.com/uc?export=download&id=1WGa6yNTXcAJPbCUA-n412gnKNyHt1rm_",
+    "https://drive.google.com/uc?export=download&id=1K_w8ckNZFbhrCl_o-etPK_RSGxhMJApo",
+    "https://drive.google.com/uc?export=download&id=1l0WE4IYXqNiKrY0lZhFHqvBpfcp19CyI",
+    "https://drive.google.com/uc?export=download&id=1auUwGsx62_ThFIfGAjIjqYJLDY51qh0P",
+    "https://drive.google.com/uc?export=download&id=1gA9LP_TCAFDNtKo33Q8PKBaUpCIq2vAD",
+    "https://drive.google.com/uc?export=download&id=1hXemgpjndghquYHmtS0X0BkM0HE4S2Oh",
+]
 
 def get_today():
     tz = pytz.timezone("Asia/Kolkata")
@@ -47,7 +57,7 @@ async def couple_of_the_day(_, m: Message):
     if cached and cached["date"] == today:
         try:
             return await m.reply_photo(
-                photo=cached["pfp"],
+                photo=cached["image"],
                 caption=couple_text(cached["mention1"], cached["mention2"], today, tomorrow),
                 reply_markup=couple_buttons(cached["id1"], cached["name1"], cached["id2"], cached["name2"])
             )
@@ -75,27 +85,14 @@ async def couple_of_the_day(_, m: Message):
     name1 = user1.first_name[:15] if user1.first_name else "Anonymous"
     name2 = user2.first_name[:15] if user2.first_name else "Anonymous"
 
-    # Mention banao
     mention1 = f"<a href='tg://openmessage?user_id={user1.id}'>{name1}</a>"
     mention2 = f"<a href='tg://openmessage?user_id={user2.id}'>{name2}</a>"
 
-    # User 1 ki profile photo download karo
-    pfp_path = f"downloads/couple_pfp_{chat_id}.jpg"
-    pfp_file = None
-    import os
-    os.makedirs("downloads", exist_ok=True)
+    selected_image = random.choice(COUPLE_IMAGES)
 
-    try:
-        photos = await app.get_chat_photos(user1.id, limit=1)
-        if photos:
-            pfp_file = await app.download_media(photos[0].file_id, file_name=pfp_path)
-    except Exception:
-        pass
-
-    # Cache save
     couple_cache[chat_id] = {
         "date": today,
-        "pfp": pfp_file,       # None hoga agar photo nahi mili
+        "image": selected_image,
         "id1": user1.id,
         "name1": name1,
         "mention1": mention1,
@@ -107,26 +104,16 @@ async def couple_of_the_day(_, m: Message):
     caption = couple_text(mention1, mention2, today, tomorrow)
     buttons = couple_buttons(user1.id, name1, user2.id, name2)
 
+    await progress.delete()
+
     try:
-        if pfp_file:
-            await m.reply_photo(
-                photo=pfp_file,
-                caption=caption,
-                reply_markup=buttons
-            )
-        else:
-            await m.reply_text(text=caption, reply_markup=buttons)
+        await m.reply_photo(
+            photo=selected_image,
+            caption=caption,
+            reply_markup=buttons
+        )
     except Exception:
         await m.reply_text(text=caption, reply_markup=buttons)
-    finally:
-        # Local file delete karo
-        try:
-            if pfp_file:
-                os.remove(pfp_file)
-        except Exception:
-            pass
-
-    await progress.delete()
 
 
 @app.on_message(filters.command(["couplereset"]) & ~filters.private)
