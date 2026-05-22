@@ -7,18 +7,6 @@ from Elevenyts import app
 
 couple_cache = {}
 
-# Test karne ke liye maine pehli link ek normal working image ki daal di hai
-# Agar ye chal jaye, to samajh jana Drive links ka issue tha
-COUPLE_IMAGES = [
-    "https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=800", # Sample Premium Image
-    "https://drive.google.com/uc?export=download&id=1WGa6yNTXcAJPbCUA-n412gnKNyHt1rm_",
-    "https://drive.google.com/uc?export=download&id=1K_w8ckNZFbhrCl_o-etPK_RSGxhMJApo",
-    "https://drive.google.com/uc?export=download&id=1l0WE4IYXqNiKrY0lZhFHqvBpfcp19CyI",
-    "https://drive.google.com/uc?export=download&id=1auUwGsx62_ThFIfGAjIjqYJLDY51qh0P",
-    "https://drive.google.com/uc?export=download&id=1gA9LP_TCAFDNtKo33Q8PKBaUpCIq2vAD",
-    "https://drive.google.com/uc?export=download&id=1hXemgpjndghquYHmtS0X0BkM0HE4S2Oh"
-]
-
 def get_today():
     tz = pytz.timezone("Asia/Kolkata")
     return datetime.now(tz).strftime("%B %d, %Y")
@@ -27,12 +15,12 @@ def get_tomorrow():
     tz = pytz.timezone("Asia/Kolkata")
     return (datetime.now(tz) + timedelta(days=1)).strftime("%B %d, %Y")
 
-def couple_text(name1, name2, today, tomorrow):
+def couple_text(mention1, mention2, today, tomorrow):
     return (
         f"<b>ᴄᴏᴜᴘʟᴇ ᴏғ ᴛʜᴇ ᴅᴀʏ</b>\n"
         f"────────────────────\n\n"
-        f"⚡️ <b>{name1}</b>\n"
-        f"⚡️ <b>{name2}</b>\n\n"
+        f"⚡️ {mention1}\n"
+        f"⚡️ {mention2}\n\n"
         f"<blockquote>"
         f"📅 <b>Timeline:</b> {today}\n"
         f"⏳ <b>Next Matchup:</b> {tomorrow}"
@@ -47,69 +35,99 @@ def couple_buttons(user1_id, name1, user2_id, name2):
         ]
     ])
 
+
 @app.on_message(filters.command(["couple", "couples"]) & ~filters.private)
 async def couple_of_the_day(_, m: Message):
     chat_id  = m.chat.id
     today    = get_today()
     tomorrow = get_tomorrow()
 
+    # Cache check
     cached = couple_cache.get(chat_id)
     if cached and cached["date"] == today:
         try:
             return await m.reply_photo(
-                photo=cached["image"],
-                caption=couple_text(cached["name1"], cached["name2"], today, tomorrow),
+                photo=cached["pfp"],
+                caption=couple_text(cached["mention1"], cached["mention2"], today, tomorrow),
                 reply_markup=couple_buttons(cached["id1"], cached["name1"], cached["id2"], cached["name2"])
             )
         except Exception:
-            # Fallback agar image send na ho paye
             return await m.reply_text(
-                text=couple_text(cached["name1"], cached["name2"], today, tomorrow),
+                text=couple_text(cached["mention1"], cached["mention2"], today, tomorrow),
                 reply_markup=couple_buttons(cached["id1"], cached["name1"], cached["id2"], cached["name2"])
             )
 
     progress = await m.reply_text("✨ <code>Shuffling matchmaking matrix...</code>")
-    
+
+    # Members fetch
     try:
         members = []
-        # Chunk size lagaya hai taaki safely fetch ho
         async for member in app.get_chat_members(chat_id, limit=100):
             if member.user and not member.user.is_bot and not member.user.is_deleted:
                 members.append(member.user)
     except Exception as e:
-        return await progress.edit_text(f"⚠️ <code>Error fetching members: {e}</code>\n\n<i>Make sure the bot is an admin with member privileges!</i>")
+        return await progress.edit_text(f"⚠️ <code>Error: {e}</code>")
 
     if len(members) < 2:
-        return await progress.edit_text("⚠️ <code>Minimum 2 active members required in this group.</code>")
+        return await progress.edit_text("⚠️ <code>Minimum 2 active members required.</code>")
 
     user1, user2 = random.sample(members, 2)
     name1 = user1.first_name[:15] if user1.first_name else "Anonymous"
     name2 = user2.first_name[:15] if user2.first_name else "Anonymous"
-    
-    selected_image = random.choice(COUPLE_IMAGES)
 
-    couple_cache[chat_id] = {
-        "date": today,
-        "image": selected_image,
-        "id1": user1.id,
-        "name1": name1,
-        "id2": user2.id,
-        "name2": name2,
-    }
+    # Mention banao
+    mention1 = f"<a href='tg://openmessage?user_id={user1.id}'>{name1}</a>"
+    mention2 = f"<a href='tg://openmessage?user_id={user2.id}'>{name2}</a>"
+
+    # User 1 ki profile photo download karo
+    pfp_path = f"downloads/couple_pfp_{chat_id}.jpg"
+    pfp_file = None
+    import os
+    os.makedirs("downloads", exist_ok=True)
 
     try:
-        await m.reply_photo(
-            photo=selected_image,
-            caption=couple_text(name1, name2, today, tomorrow),
-            reply_markup=couple_buttons(user1.id, name1, user2.id, name2)
-        )
-        await progress.delete()
-    except Exception as img_err:
-        # Agar image link me issue hoga to ye text send kar dega bina crash hue
-        await progress.edit_text(
-            text=f"{couple_text(name1, name2, today, tomorrow)}\n\n⚠️ <i>Note: Image load nahi ho payi, displaying text format.</i>",
-            reply_markup=couple_buttons(user1.id, name1, user2.id, name2)
-        )
+        photos = await app.get_chat_photos(user1.id, limit=1)
+        if photos:
+            pfp_file = await app.download_media(photos[0].file_id, file_name=pfp_path)
+    except Exception:
+        pass
+
+    # Cache save
+    couple_cache[chat_id] = {
+        "date": today,
+        "pfp": pfp_file,       # None hoga agar photo nahi mili
+        "id1": user1.id,
+        "name1": name1,
+        "mention1": mention1,
+        "id2": user2.id,
+        "name2": name2,
+        "mention2": mention2,
+    }
+
+    caption = couple_text(mention1, mention2, today, tomorrow)
+    buttons = couple_buttons(user1.id, name1, user2.id, name2)
+
+    try:
+        if pfp_file:
+            await m.reply_photo(
+                photo=pfp_file,
+                caption=caption,
+                reply_markup=buttons
+            )
+        else:
+            await m.reply_text(text=caption, reply_markup=buttons)
+    except Exception:
+        await m.reply_text(text=caption, reply_markup=buttons)
+    finally:
+        # Local file delete karo
+        try:
+            if pfp_file:
+                os.remove(pfp_file)
+        except Exception:
+            pass
+
+    await progress.delete()
+
 
 @app.on_message(filters.command(["couplereset"]) & ~filters.private)
 async def reset_couple(_, m: Message):
