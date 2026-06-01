@@ -59,6 +59,7 @@ class TgCall(PyTgCalls):
                 caption=caption,
                 reply_markup=reply_markup,
                 has_spoiler=True,
+                parse_mode=enums.ParseMode.HTML,
             )
         except errors.FloodWait as fw:
             await asyncio.sleep(fw.value + 1)
@@ -69,6 +70,7 @@ class TgCall(PyTgCalls):
                     caption=caption,
                     reply_markup=reply_markup,
                     has_spoiler=True,
+                    parse_mode=enums.ParseMode.HTML,
                 )
             except Exception:
                 return None
