@@ -4,6 +4,8 @@
 import time
 import aiohttp
 import logging
+import html  # Added for safe HTML escaping
+import asyncio
 from pyrogram import filters, enums
 from pyrogram.types import Message
 from Elevenyts import app
@@ -14,8 +16,28 @@ logger = logging.getLogger(__name__)
 ASKAI_API   = "https://apifreellm.com/api/v1/chat"   
 COOLDOWN    = 20  # seconds
 ASKAI_TOKEN = config.ASKAI_API_KEY
+
 # ── in-memory cooldown store: {user_id: last_used_timestamp} ──
 _cooldowns: dict[int, float] = {}
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  ʜᴇʟᴘᴇʀ (Shifted Top to Fix NameError)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def _split_text(text: str, limit: int = 3600) -> list[str]:
+    """Long response ko line-breaks pe split karo."""
+    chunks, current = [], ""
+    for line in text.splitlines(keepends=True):
+        if len(current) + len(line) > limit:
+            if current:
+                chunks.append(current.strip())
+            current = line
+        else:
+            current += line
+    if current.strip():
+        chunks.append(current.strip())
+    return chunks or [text[:limit]]
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -25,7 +47,6 @@ _cooldowns: dict[int, float] = {}
 @app.on_message(filters.command("askai") & (filters.group | filters.private))
 async def askai_cmd(_, message: Message):
     user_id = message.from_user.id
-
     question = " ".join(message.command[1:]).strip()
 
     if not question:
@@ -63,7 +84,7 @@ async def askai_cmd(_, message: Message):
     status = await message.reply_text(
         "<blockquote>"
         "🤖  <b>ᴀɪ ꜱᴏᴄʜ ʀᴀʜᴀ ʜᴀɪ...</b>\n\n"
-        f"❓  <code>{question}</code>"
+        f"❓  <code>{html.escape(question)}</code>"
         "</blockquote>",
         parse_mode=enums.ParseMode.HTML,
     )
@@ -97,7 +118,7 @@ async def askai_cmd(_, message: Message):
             parse_mode=enums.ParseMode.HTML,
         )
         return
-    except aiohttp.ServerTimeoutError:
+    except asyncio.TimeoutError:
         await status.edit_text(
             "<blockquote>❌  ʀᴇqᴜᴇꜱᴛ ᴛɪᴍᴇᴏᴜᴛ. ʙᴀᴀᴅ ᴍᴇ ᴛʀʏ ᴋᴀʀᴏ.</blockquote>",
             parse_mode=enums.ParseMode.HTML,
@@ -106,13 +127,12 @@ async def askai_cmd(_, message: Message):
     except Exception as e:
         logger.error(f"askai error: {e}")
         await status.edit_text(
-            f"<blockquote>❌  ᴇʀʀᴏʀ\n\n<code>{e}</code></blockquote>",
+            f"<blockquote>❌  ᴇʀʀᴏʀ\n\n<code>{html.escape(str(e))}</code></blockquote>",
             parse_mode=enums.ParseMode.HTML,
         )
         return
 
     # ── parse response ──
-    # apifreellm returns {"response": "..."} or {"message": "..."}
     answer = (
         data.get("response")
         or data.get("message")
@@ -127,8 +147,12 @@ async def askai_cmd(_, message: Message):
         )
         return
 
+    # Safe escape to prevent HTML parse errors
+    answer = html.escape(answer)
+    safe_question = html.escape(question)
+
     full_text = (
-        f"<blockquote>🤖  <b>ᴀsᴋ ᴀɪ</b>  |  ❓ <i>{question}</i></blockquote>\n"
+        f"<blockquote>🤖  <b>ᴀsᴋ ᴀɪ</b>  |  ❓ <i>{safe_question}</i></blockquote>\n"
         f"<blockquote expandable>{answer}</blockquote>\n"
         f"<blockquote>⏳  ᴀɢʟᴀ ꜱᴀᴡᴀʟ  <b>20ꜱ</b> ʙᴀᴀᴅ ᴘᴜᴄʜʜ ꜱᴀᴋᴛᴇ ʜᴏ.</blockquote>"
     )
@@ -138,7 +162,7 @@ async def askai_cmd(_, message: Message):
     else:
         await status.delete()
         chunks = _split_text(answer, limit=3600)
-        header = f"<blockquote>🤖  <b>ᴀsᴋ ᴀɪ</b>  |  ❓ <i>{question}</i></blockquote>\n"
+        header = f"<blockquote>🤖  <b>ᴀsᴋ ᴀɪ</b>  |  ❓ <i>{safe_question}</i></blockquote>\n"
         for i, chunk in enumerate(chunks):
             part = (
                 header if i == 0 else
@@ -148,22 +172,3 @@ async def askai_cmd(_, message: Message):
             if i == len(chunks) - 1:
                 part += "\n<blockquote>⏳  ᴀɢʟᴀ ꜱᴀᴡᴀʟ  <b>20ꜱ</b> ʙᴀᴀᴅ ᴘᴜᴄʜʜ ꜱᴀᴋᴛᴇ ʜᴏ.</blockquote>"
             await message.reply_text(part, parse_mode=enums.ParseMode.HTML)
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  ʜᴇʟᴘᴇʀ
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-def _split_text(text: str, limit: int = 3600) -> list[str]:
-    """Long response ko line-breaks pe split karo."""
-    chunks, current = [], ""
-    for line in text.splitlines(keepends=True):
-        if len(current) + len(line) > limit:
-            if current:
-                chunks.append(current.strip())
-            current = line
-        else:
-            current += line
-    if current.strip():
-        chunks.append(current.strip())
-    return chunks or [text[:limit]]
