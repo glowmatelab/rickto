@@ -7,13 +7,13 @@ import logging
 from pyrogram import filters, enums
 from pyrogram.types import Message
 from Elevenyts import app
-from config import Config
+from Elevenyts import config
 
 logger = logging.getLogger(__name__)
 
 ASKAI_API   = "https://apifreellm.com/api/v1/chat"   
 COOLDOWN    = 20  # seconds
-ASKAI_TOKEN = Config().ASKAI_API_KEY
+ASKAI_TOKEN = config.ASKAI_API_KEY
 # ── in-memory cooldown store: {user_id: last_used_timestamp} ──
 _cooldowns: dict[int, float] = {}
 
