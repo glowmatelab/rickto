@@ -10,26 +10,29 @@ from pyrogram.types import Message
 from Elevenyts import app
 from Elevenyts import config
 
-# Set up logging to show everything in terminal
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-ASKAI_API   = "https://apifreellm.com/api/v1/chat"   
+ASKAI_API   = "https://apifreellm.com/api/v1/chat"
 COOLDOWN    = 20  # seconds
 ASKAI_TOKEN = config.ASKAI_API_KEY
 
-print(f"==========================================")
-print(f"🤖 ASKAI PLUGIN LOADING...")
-print(f"🔑 Loaded Token: {ASKAI_TOKEN[:5] if ASKAI_TOKEN else 'NONE'}... (Length: {len(str(ASKAI_TOKEN)) if ASKAI_TOKEN else 0})")
-print(f"==========================================")
-
-# ── in-memory cooldown store: {user_id: last_used_timestamp} ──
+# ── in-memory cooldown store ──
 _cooldowns: dict[int, float] = {}
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  ʜᴇʟᴘᴇʀ 
+#  ʜᴇʟᴘᴇʀs
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def _get_name(user) -> str:
+    """User ka first name + last name (if any) return karo."""
+    if not user:
+        return "Unknown"
+    name = user.first_name or ""
+    if user.last_name:
+        name += f" {user.last_name}"
+    return name.strip() or "Unknown"
+
 
 def _split_text(text: str, limit: int = 3600) -> list[str]:
     """Long response ko line-breaks pe split karo."""
@@ -52,55 +55,59 @@ def _split_text(text: str, limit: int = 3600) -> list[str]:
 
 @app.on_message(filters.command("askai") & (filters.group | filters.private))
 async def askai_cmd(_, message: Message):
-    user_id = message.from_user.id
-    question = " ".join(message.command[1:]).strip()
-    
-    # 📝 DEBUG 1: Command trigger check
-    print(f"\n[DEBUG] 🚀 /askai command triggered by User ID: {user_id}")
-    print(f"[DEBUG] 📝 Question received: '{question}'")
+    user_id   = message.from_user.id
+    user_name = _get_name(message.from_user)
+    question  = " ".join(message.command[1:]).strip()
 
+    # ── No question given ──
     if not question:
-        print("[DEBUG] ⚠️ Question khali hai, usage message bhej raha hu.")
         await message.reply_text(
-            "🤖 **ᴀsᴋ ᴀɪ**\n\n"
-            "⚠️ ꜱᴏᴍᴇᴛʜɪɴɢ ᴛᴏ ᴀsᴋ ᴍᴜᴊʜᴇ ʙᴛᴀ?\n\n"
-            "**ʜᴏᴡ ᴛᴏ ᴜsᴇ :**\n"
+            "╔═══════════════════╗\n"
+            "║   🤖  **ᴀsᴋ ᴀɪ**   ║\n"
+            "╚═══════════════════╝\n\n"
+            "⚠️ Kuch toh pooch bhai!\n\n"
+            "**Usage:**\n"
             " `/askai What is AI?`\n"
             " `/askai Python kya hota hai?`",
             parse_mode=enums.ParseMode.MARKDOWN,
         )
         return
 
-    # ── cooldown check ──
-    now = time.time()
-    last_used = _cooldowns.get(user_id, 0)
-    remaining = COOLDOWN - (now - last_used)
+    # ── Cooldown check ──
+    now      = time.time()
+    last     = _cooldowns.get(user_id, 0)
+    remaining = COOLDOWN - (now - last)
 
     if remaining > 0:
         secs = int(remaining) + 1
-        print(f"[DEBUG] ⏳ User {user_id} cooldown par hai. {secs}s bache hain.")
         await message.reply_text(
-            f"⏳ ʏᴀᴀʀ ᴢʀᴀ ʀᴜᴋ! **{secs}s** ʙᴀᴀᴅ ᴘᴜᴄʜʜ.\n\n"
-            "🔁 ʜᴀʀ ꜱᴀᴡᴀʟ ᴋᴇ ʙᴀᴀᴅ **20 ꜱᴇᴄ** ᴋᴀ ᴄᴏᴏʟᴅᴏᴡɴ ʜᴀɪ.",
+            f"⏳ **Zra ruk {user_name}!**\n\n"
+            f"**{secs}s** baad pooch sakte ho.\n"
+            f"🔁 Har sawal ke baad **20s** cooldown hai.",
             parse_mode=enums.ParseMode.MARKDOWN,
         )
         return
 
-    # ── mark cooldown ──
+    # ── Mark cooldown ──
     _cooldowns[user_id] = now
 
-    print("[DEBUG] 🤖 Status message (Thinking...) send ho raha hai.")
+    # ── Send "Thinking..." with username and question ──
+    thinking_text = (
+        f"**✦ Ask AI**\n"
+        f"**›** {user_name}: {question}\n\n"
+        f"**⊷** `Thinking...`"
+    )
     status = await message.reply_text(
-        "🤖 **ᴀɪ ꜱᴏᴄʜ ʀᴀʜᴀ ʜᴀɪ...**\n\n"
-        f"❓ `{question}`",
+        thinking_text,
         parse_mode=enums.ParseMode.MARKDOWN,
     )
 
-    # 📝 DEBUG 2: API Request bhejne se pehle data check
-    print(f"[DEBUG] 🌐 API call start ho rahi hai...")
-    print(f"[DEBUG] 🔗 URL: {ASKAI_API}")
-    print(f"[DEBUG] 🎫 Token used: Bearer {ASKAI_TOKEN[:5] if ASKAI_TOKEN else 'NONE'}...")
+    # ── Animated dots while waiting ──
+    dots_task = asyncio.create_task(
+        _animate_thinking(status, user_name, question)
+    )
 
+    # ── API call ──
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(
@@ -113,40 +120,47 @@ async def askai_cmd(_, message: Message):
                 timeout=aiohttp.ClientTimeout(total=30),
             ) as resp:
 
-                # 📝 DEBUG 3: Status code check
-                print(f"[DEBUG] 📥 API Response Status Code: {resp.status}")
-
                 if resp.status != 200:
                     raw_err = await resp.text()
-                    print(f"[DEBUG] ❌ API fail hui. Error Raw Response: {raw_err}")
+                    logger.error(f"askai API error {resp.status}: {raw_err}")
+                    dots_task.cancel()
                     await status.edit_text(
-                        f"❌ ᴀᴘɪ ᴇʀʀᴏʀ — `{resp.status}`",
+                        f"❌ **API Error** — `{resp.status}`",
                         parse_mode=enums.ParseMode.MARKDOWN,
                     )
                     return
 
                 data = await resp.json()
-                # 📝 DEBUG 4: API se kya JSON aaya pura print karein
-                print(f"[DEBUG] ✅ API JSON Data Received: {data}")
 
     except aiohttp.ClientConnectorError as e:
-        print(f"[DEBUG] ❌ Connection Error: {e}")
-        await status.edit_text("❌ ᴀᴘɪ ᴜɴʀᴇᴀᴄʜᴀʙʟᴇ. ʙᴀᴀᴅ ᴍᴇ ᴛʀʏ ᴋᴀʀᴏ.", parse_mode=enums.ParseMode.MARKDOWN)
+        logger.error(f"askai connection error: {e}")
+        dots_task.cancel()
+        await status.edit_text(
+            "❌ **API unreachable.** Baad mein try karo.",
+            parse_mode=enums.ParseMode.MARKDOWN,
+        )
         return
     except asyncio.TimeoutError:
-        print("[DEBUG] ❌ API Timeout ho gayi (30 seconds limit)!")
-        await status.edit_text("❌ ʀᴇqᴜᴇꜱᴛ ᴛɪᴍᴇᴏᴜᴛ. ʙᴀᴀᴅ ᴍᴇ ᴛʀʏ ᴋᴀʀᴏ.", parse_mode=enums.ParseMode.MARKDOWN)
+        logger.error("askai API timeout")
+        dots_task.cancel()
+        await status.edit_text(
+            "❌ **Request timeout.** API ne 30s mein jawab nahi diya.",
+            parse_mode=enums.ParseMode.MARKDOWN,
+        )
         return
     except Exception as e:
-        print(f"[DEBUG] ❌ Unknown Exception raised: {e}")
-        logger.error(f"askai error: {e}")
+        logger.error(f"askai unknown error: {e}")
+        dots_task.cancel()
         await status.edit_text(
-            f"❌ ᴇʀʀᴏʀ\n\n`{e}`",
+            f"❌ **Error**\n\n`{e}`",
             parse_mode=enums.ParseMode.MARKDOWN,
         )
         return
 
-    # ── parse response ──
+    # ── Stop animation ──
+    dots_task.cancel()
+
+    # ── Parse answer ──
     answer = (
         data.get("response")
         or data.get("message")
@@ -154,33 +168,67 @@ async def askai_cmd(_, message: Message):
         or str(data)
     ).strip()
 
-    print(f"[DEBUG] 🧠 Parsed Answer String: {answer[:100]}...")
+    # ── Final formatted message — blockquote with expandable answer ──
+    # Expandable blockquote: lines prefixed with "**>**", last line "**>||**"
+    answer_lines = answer.splitlines()
+    if answer_lines:
+        quoted = "\n".join(f"**>** {line}" if line.strip() else "**>**" for line in answer_lines[:-1])
+        quoted += ("\n" if answer_lines[:-1] else "") + f"**>** {answer_lines[-1]}||"
+    else:
+        quoted = f"**>** {answer}||"
 
-    if not answer or answer == str(data):
-        print(f"[DEBUG] ⚠️ Warning: Answer key direct nahi mili, fallback text ya empty mila.")
-
-    # Format output text using Markdown for safe and beautiful UI
     full_text = (
-        f"🤖 **ᴀsᴋ ᴀɪ** | ❓ _{question}_\n\n"
-        f"{answer}\n\n"
-        f"⏳ ᴀɢʟᴀ ꜱᴀᴡᴀʟ **20ꜱ** ʙᴀᴀᴅ ᴘᴜᴄʜʜ ꜱᴀᴋᴛᴇ ʜᴏ."
+        f"**✦ Ask AI**\n"
+        f"**›** {user_name}: {question}\n\n"
+        f"{quoted}\n\n"
+        f"_⏳ Next question in 20s_"
     )
 
     if len(full_text) <= 4096:
-        print("[DEBUG] 📤 Message short hai (under 4096). Editing status message...")
         await status.edit_text(full_text, parse_mode=enums.ParseMode.MARKDOWN)
     else:
-        print(f"[DEBUG] ✂️ Message bada hai ({len(full_text)} chars). Splitting into chunks...")
         await status.delete()
-        chunks = _split_text(answer, limit=3600)
-        header = f"🤖 **ᴀsᴋ ᴀɪ** | ❓ _{question}_\n\n"
+        chunks = _split_text(answer, limit=3200)
         for i, chunk in enumerate(chunks):
-            part = (
-                header if i == 0 else
-                f"🤖 ᴀsᴋ ᴀɪ — ᴘᴀʀᴛ {i + 1}/{len(chunks)}\n\n"
-            )
-            part += chunk
+            chunk_lines = chunk.splitlines()
+            if chunk_lines:
+                q = "\n".join(f"**>** {l}" if l.strip() else "**>**" for l in chunk_lines[:-1])
+                q += ("\n" if chunk_lines[:-1] else "") + f"**>** {chunk_lines[-1]}||"
+            else:
+                q = f"**>** {chunk}||"
+
+            if i == 0:
+                part = f"**✦ Ask AI**\n**›** {user_name}: {question}\n\n{q}"
+            else:
+                part = f"**✦ Ask AI** — Part {i+1}/{len(chunks)}\n\n{q}"
+
             if i == len(chunks) - 1:
-                part += "\n\n⏳ ᴀɢʟᴀ ꜱᴀᴡᴀʟ **20ꜱ** ʙᴀᴀᴅ ᴘᴜᴄʜʜ ꜱᴀᴋᴛᴇ ʜᴏ."
+                part += "\n\n_⏳ Next question in 20s_"
+
             await message.reply_text(part, parse_mode=enums.ParseMode.MARKDOWN)
-    print("[DEBUG] ✅ Process Complete for this request.\n")
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  ᴀɴɪᴍᴀᴛɪᴏɴ ʜᴇʟᴘᴇʀ
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+async def _animate_thinking(status, user_name: str, question: str):
+    """Thinking message mein animated dots update karo jab tak API respond kare."""
+    frames = ["Thinking ⏳", "Thinking. ⏳", "Thinking.. ⏳", "Thinking... ⏳"]
+    i = 0
+    try:
+        while True:
+            await asyncio.sleep(2)
+            frame = frames[i % len(frames)]
+            i += 1
+            try:
+                await status.edit_text(
+                    f"**✦ Ask AI**\n"
+                    f"**›** {user_name}: {question}\n\n"
+                    f"**⊷** `{frame}`",
+                    parse_mode=enums.ParseMode.MARKDOWN,
+                )
+            except Exception:
+                break  # Message delete ho gaya ya flood wait — stop karo
+    except asyncio.CancelledError:
+        pass  # Normal cancellation when API responds
