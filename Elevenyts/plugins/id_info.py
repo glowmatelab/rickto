@@ -110,7 +110,7 @@ async def fast_id(client, message):
 
 # ─────────────────────────── /say ────────────────────────────
 
-@app.on_message(filters.command("send"))
+@app.on_message(filters.command("say"))
 async def say_cmd(client, message):
     text = message.text.split(None, 1)
     if len(text) < 2:
