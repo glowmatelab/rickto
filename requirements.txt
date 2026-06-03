@@ -13,3 +13,4 @@ Pillow
 ytmusicapi
 instaloader
 pytz
+gtts
