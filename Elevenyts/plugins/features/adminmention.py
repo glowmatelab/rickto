@@ -63,7 +63,7 @@ async def report_to_admins(_, message: types.Message):
             f"👤 <b>Reporter:</b> {reporter}\n"
         )
         if cleaned_text:
-            report_text += f"💬 <b>Message:</b> <i>\"{cleaned_text}\"</i>\n"
+            report_text += f"<blockquote>💬 <b>Message:</b> <i>\"{cleaned_text}\"</i></blockquote>\n"
         if message.reply_to_message:
             replied = message.reply_to_message
             replied_user = replied.from_user
