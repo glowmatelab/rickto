@@ -293,7 +293,7 @@ async def _download_and_play(group_chat_id: int, status_msg: Message | None = No
 # ─────────────────────────────────────────────
 
 @app.on_message(
-    filters.command(["directplay", "dplay"]) & filters.group & ~app.bl_users
+    filters.command(["directplay", "dp"]) & filters.group & ~app.bl_users
 )
 @can_manage_vc
 async def directplay_cmd(_, m: Message):
