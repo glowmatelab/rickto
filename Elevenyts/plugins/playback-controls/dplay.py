@@ -1,6 +1,6 @@
 """
 DirectPlay - Fixed single channel se random songs bajao
-Command: /dplay
+Auto next - jab tak /stopdplay na karo tab tak bajata rahe
 """
 
 import asyncio
@@ -10,7 +10,7 @@ import random
 import time
 
 from pyrogram import filters
-from pyrogram.errors import FloodWait, ChannelInvalid, ChannelPrivate, MessageIdInvalid, MessageDeleteForbidden, ChatSendPlainForbidden, ChatWriteForbidden
+from pyrogram.errors import FloodWait, ChannelInvalid, ChannelPrivate
 from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
 from Elevenyts import app, db, tune, config
@@ -22,10 +22,13 @@ logger = logging.getLogger(__name__)
 _dp_played: dict[int, set] = {}
 _dp_current_file: dict[int, str] = {}
 _dp_ctrl_msg: dict[int, int] = {}
+_dp_active: set[int] = set()
 
 
 def _dp_button(chat_id):
-    return InlineKeyboardMarkup([[InlineKeyboardButton("⏭ Play Next", callback_data=f"dp_next_{chat_id}")]])
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("⏹ End DirectPlay", callback_data=f"dp_end_{chat_id}")
+    ]])
 
 
 def _cleanup_file(chat_id):
@@ -45,7 +48,17 @@ async def _get_userbot(chat_id):
         return None
 
 
+def _stop_dplay(chat_id):
+    _dp_active.discard(chat_id)
+    _dp_played.pop(chat_id, None)
+    _cleanup_file(chat_id)
+    _dp_ctrl_msg.pop(chat_id, None)
+
+
 async def _download_and_play(group_chat_id: int, status_msg=None):
+    if group_chat_id not in _dp_active:
+        return
+
     channel_id = config.DIRECT_PLAY_CHANNEL
     if not channel_id:
         return
@@ -63,10 +76,9 @@ async def _download_and_play(group_chat_id: int, status_msg=None):
 
     client = await _get_userbot(group_chat_id)
     if not client:
-        await safe_edit("❌ Userbot nahi mila! String session check karo.")
+        await safe_edit("❌ Userbot nahi mila!")
         return
 
-    # Channel history fetch
     played = _dp_played.setdefault(group_chat_id, set())
     all_msgs = []
     try:
@@ -77,6 +89,7 @@ async def _download_and_play(group_chat_id: int, status_msg=None):
                 all_msgs.append(msg)
     except (ChannelInvalid, ChannelPrivate) as e:
         await safe_edit(f"❌ Channel access error: <code>{e}</code>")
+        _dp_active.discard(group_chat_id)
         return
     except FloodWait as fw:
         await asyncio.sleep(fw.value)
@@ -87,6 +100,7 @@ async def _download_and_play(group_chat_id: int, status_msg=None):
 
     if not all_msgs:
         await safe_edit("❌ Channel mein koi audio/video nahi mila!")
+        _dp_active.discard(group_chat_id)
         return
 
     unplayed = [m for m in all_msgs if m.id not in played]
@@ -122,7 +136,6 @@ async def _download_and_play(group_chat_id: int, status_msg=None):
         return
 
     _dp_current_file[group_chat_id] = file_path
-
     dur_str = time.strftime("%H:%M:%S" if duration >= 3600 else "%M:%S", time.gmtime(duration)) if duration else "?"
 
     media = Media(
@@ -131,31 +144,55 @@ async def _download_and_play(group_chat_id: int, status_msg=None):
         url=chosen.link or "", video=is_video,
     )
 
-    await safe_edit(f"▶️ <b>Playing:</b> <code>{title}</code>")
+    ctrl_text = (
+        f"🎵 <b>DirectPlay</b>\n\n"
+        f"🎧 <b>{title}</b>\n"
+        f"⏱ <code>{dur_str}</code>\n\n"
+        f"<i>Auto-playing from channel... next song automatically aayega.</i>"
+    )
 
     try:
-        await tune.play_media(chat_id=group_chat_id, message=status_msg, media=media)
-    except Exception as e:
-        await safe_edit(f"❌ Play fail: <code>{e}</code>")
-        _cleanup_file(group_chat_id)
-        return
-
-    ctrl_text = f"🎵 <b>DirectPlay</b>\n\n🎧 <b>{title}</b>\n⏱ <code>{dur_str}</code>\n\n<i>Channel se random song chal raha hai.</i>"
-
-    old_ctrl_id = _dp_ctrl_msg.get(group_chat_id)
-    if old_ctrl_id:
-        try:
-            await app.edit_message_text(group_chat_id, old_ctrl_id, ctrl_text, reply_markup=_dp_button(group_chat_id))
-            return
-        except Exception:
-            pass
-
-    try:
+        old_ctrl_id = _dp_ctrl_msg.get(group_chat_id)
+        if old_ctrl_id:
+            try:
+                await app.delete_messages(group_chat_id, old_ctrl_id)
+            except Exception:
+                pass
         sent = await app.send_message(group_chat_id, ctrl_text, reply_markup=_dp_button(group_chat_id))
         _dp_ctrl_msg[group_chat_id] = sent.id
     except Exception as e:
         logger.warning(f"[DirectPlay] Control msg fail: {e}")
 
+    if status_msg:
+        try:
+            await status_msg.delete()
+        except Exception:
+            pass
+
+    try:
+        await tune.play_media(chat_id=group_chat_id, message=None, media=media)
+    except Exception as e:
+        logger.error(f"[DirectPlay] Play fail: {e}")
+        _cleanup_file(group_chat_id)
+        return
+
+    # Stream khatam hone ka wait, phir auto next
+    if duration > 0:
+        await asyncio.sleep(duration + 2)
+    else:
+        await asyncio.sleep(300)
+
+    # ── Double play fix ──
+    if group_chat_id not in _dp_active:
+        return  # Beech mein band kar diya tha
+
+    if await db.get_call(group_chat_id):
+        return  # VC abhi bhi chal rahi hai, double play mat karo
+
+    asyncio.create_task(_download_and_play(group_chat_id))
+
+
+# ── Commands ──
 
 @app.on_message(filters.command(["dplay"]) & filters.group & ~app.bl_users)
 @can_manage_vc
@@ -172,6 +209,14 @@ async def dplay_cmd(_, m: Message):
             pass
         return
 
+    if m.chat.id in _dp_active:
+        try:
+            await m.reply_text("▶️ DirectPlay pehle se chal raha hai!\n\nBand karne ke liye: /stopdplay")
+        except Exception:
+            pass
+        return
+
+    _dp_active.add(m.chat.id)
     _dp_played.pop(m.chat.id, None)
     _dp_ctrl_msg.pop(m.chat.id, None)
 
@@ -183,25 +228,62 @@ async def dplay_cmd(_, m: Message):
     asyncio.create_task(_download_and_play(m.chat.id, status_msg))
 
 
-@app.on_callback_query(filters.regex(r"^dp_next_(-?\d+)$"))
-async def dplay_next_cb(_, q: CallbackQuery):
+@app.on_message(filters.command(["stopdplay", "enddplay"]) & filters.group & ~app.bl_users)
+@can_manage_vc
+async def stopdplay_cmd(_, m: Message):
+    try:
+        await m.delete()
+    except Exception:
+        pass
+
+    if m.chat.id not in _dp_active:
+        try:
+            await m.reply_text("❌ DirectPlay abhi chal nahi raha.")
+        except Exception:
+            pass
+        return
+
+    _stop_dplay(m.chat.id)
+
+    try:
+        await tune.play_next(m.chat.id)
+    except Exception:
+        pass
+
+    try:
+        await m.reply_text("⏹ <b>DirectPlay band kar diya.</b>")
+    except Exception:
+        pass
+
+
+# ── Callbacks ──
+
+@app.on_callback_query(filters.regex(r"^dp_end_(-?\d+)$"))
+async def dplay_end_cb(_, q: CallbackQuery):
     group_chat_id = int(q.matches[0].group(1))
 
     if q.message.chat.id != group_chat_id:
         await q.answer("❌ Wrong chat!", show_alert=True)
         return
 
-    await q.answer("⏭ Next song aa raha hai...")
+    if group_chat_id not in _dp_active:
+        await q.answer("⚠️ DirectPlay pehle se band hai.", show_alert=True)
+        try:
+            await q.message.edit_reply_markup(None)
+        except Exception:
+            pass
+        return
+
+    _stop_dplay(group_chat_id)
 
     try:
-        await q.message.edit_reply_markup(
-            InlineKeyboardMarkup([[InlineKeyboardButton("⏳ Loading...", callback_data="dp_loading")]]))
+        await tune.play_next(group_chat_id)
     except Exception:
         pass
 
-    asyncio.create_task(_download_and_play(group_chat_id, q.message))
+    try:
+        await q.message.edit_text("⏹ <b>DirectPlay band kar diya.</b>")
+    except Exception:
+        pass
 
-
-@app.on_callback_query(filters.regex(r"^dp_loading$"))
-async def dp_loading_cb(_, q: CallbackQuery):
-    await q.answer("⏳ Load ho raha hai...", show_alert=False)
+    await q.answer("⏹ Band kar diya!")
