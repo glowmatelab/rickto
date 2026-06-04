@@ -28,7 +28,8 @@ class Config:
 
         # ============ DATABASE CONFIGURATION ============
         self.MONGO_URL: str = getenv("MONGO_DB_URI", "")
-
+        #------------------dplay------------------------------
+        self.DIRECT_PLAY_CHANNEL: int = int(getenv("DIRECT_PLAY_CHANNEL", "0"))
         # ============ MUSIC BOT LIMITS ============
         self.DURATION_LIMIT: int = int(getenv("DURATION_LIMIT", "300")) * 60
         self.QUEUE_LIMIT: int = int(getenv("QUEUE_LIMIT", "30"))
