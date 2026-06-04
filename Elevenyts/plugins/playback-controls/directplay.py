@@ -40,6 +40,14 @@ from pyrogram.types import (
 from Elevenyts import app, db, tune
 from Elevenyts.helpers import Media, can_manage_vc
 
+# Userbot (string session) client — bot channel history nahi padh sakta
+async def _get_userbot(chat_id: int):
+    """Group ke liye assigned userbot client return karo."""
+    try:
+        return await db.get_client(chat_id)
+    except Exception:
+        return None
+
 logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────
@@ -90,10 +98,16 @@ async def _fetch_random_track(chat_id: int, channel_id: int) -> tuple[Message, s
     """
     played = _dp_played.setdefault(chat_id, set())
 
-    # Channel ke messages iterate karo
+    # Userbot client lo — bot channel history nahi padh sakta
+    client = await _get_userbot(chat_id)
+    if not client:
+        logger.error(f"[DirectPlay] No userbot client available for {chat_id}")
+        return None, None
+
+    # Channel ke messages iterate karo (userbot se)
     all_msgs = []
     try:
-        async for msg in app.get_chat_history(channel_id, limit=200):
+        async for msg in client.get_chat_history(channel_id, limit=200):
             if msg.audio or msg.voice or msg.video or (
                 msg.document and getattr(msg.document, "mime_type", "").startswith(("audio/", "video/"))
             ):
@@ -174,7 +188,12 @@ async def _download_and_play(group_chat_id: int, status_msg: Message | None = No
 
     await safe_edit(f"⬇️ <b>Download ho raha hai:</b> <code>{title}</code>")
 
-    # Download
+    # Download — userbot se (bot channel files download nahi kar sakta)
+    client = await _get_userbot(group_chat_id)
+    if not client:
+        await safe_edit("❌ Userbot client nahi mila! String session check karo.")
+        return
+
     media_obj = msg.audio or msg.voice or msg.video or msg.document
     file_ext = (getattr(media_obj, "file_name", None) or "audio").rsplit(".", 1)[-1]
     file_id = getattr(media_obj, "file_unique_id", str(msg.id))
@@ -186,11 +205,11 @@ async def _download_and_play(group_chat_id: int, status_msg: Message | None = No
 
     try:
         if not os.path.exists(file_path):
-            await msg.download(file_name=file_path)
+            await client.download_media(msg, file_name=file_path)
     except FloodWait as fw:
         await asyncio.sleep(fw.value)
         try:
-            await msg.download(file_name=file_path)
+            await client.download_media(msg, file_name=file_path)
         except Exception as e:
             await safe_edit(f"❌ Download fail hua: <code>{e}</code>")
             return
