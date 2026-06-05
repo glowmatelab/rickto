@@ -10,7 +10,12 @@ Commands:
   /directplay status        — Current channel dekho
 
 Callback:
-  directplay_next           — Next random song bajao (button se)
+  dp_next_<chat_id>         — Next random song bajao (button se)
+
+FIXES:
+- is_directplay_active() + handle_stream_end() add kiya calls.py ke liye
+- create_task wrapper _safe_download_and_play() add kiya — silent crash fix
+- asyncio.create_task seedha nahi, wrapper se jaayega ab
 """
 
 import asyncio
@@ -40,7 +45,57 @@ from pyrogram.types import (
 from Elevenyts import app, db, tune
 from Elevenyts.helpers import Media, can_manage_vc
 
-# Userbot (string session) client — bot channel history nahi padh sakta
+logger = logging.getLogger(__name__)
+
+# ─────────────────────────────────────────────
+#  In-memory state
+# ─────────────────────────────────────────────
+
+# { group_chat_id : channel_id }
+_dp_channels: dict[int, int] = {}
+
+# { group_chat_id : set(message_ids) } — already played track IDs
+_dp_played: dict[int, set] = {}
+
+# { group_chat_id : str } — current downloaded file path (cleanup ke liye)
+_dp_current_file: dict[int, str] = {}
+
+# { group_chat_id : int } — control message id (edit karne ke liye)
+_dp_ctrl_msg: dict[int, int] = {}
+
+
+# ─────────────────────────────────────────────
+#  calls.py ke liye public interface
+# ─────────────────────────────────────────────
+
+def is_directplay_active(chat_id: int) -> bool:
+    """calls.py check karega ki directplay chal raha hai ya nahi."""
+    return chat_id in _dp_channels
+
+
+async def handle_stream_end(chat_id: int):
+    """
+    calls.py ke StreamEnded event se yeh call hoga.
+    Button wala manual next alag hai — yeh sirf auto-next ke liye hai.
+    """
+    if chat_id not in _dp_channels:
+        return
+    logger.info(f"[DirectPlay] StreamEnded for {chat_id}, auto-next trigger...")
+    asyncio.create_task(_safe_download_and_play(chat_id))
+
+
+# ─────────────────────────────────────────────
+#  Helpers
+# ─────────────────────────────────────────────
+
+async def _safe_download_and_play(chat_id: int, status_msg=None):
+    """Wrapper — exceptions silently drop nahi honge ab. Logs mein dikhega."""
+    try:
+        await _download_and_play(chat_id, status_msg)
+    except Exception as e:
+        logger.error(f"[DirectPlay] Task crashed for {chat_id}: {e}", exc_info=True)
+
+
 async def _get_userbot(chat_id: int):
     """Group ke liye assigned userbot client return karo."""
     try:
@@ -48,28 +103,6 @@ async def _get_userbot(chat_id: int):
     except Exception:
         return None
 
-logger = logging.getLogger(__name__)
-
-# ─────────────────────────────────────────────
-#  In-memory state  (RAM mein sirf ye rehta hai)
-# ─────────────────────────────────────────────
-
-# { group_chat_id : channel_id }
-_dp_channels: dict[int, int] = {}
-
-# { group_chat_id : set(message_ids) }   — already played track IDs
-_dp_played: dict[int, set] = {}
-
-# { group_chat_id : str }  — current downloaded file path (cleanup ke liye)
-_dp_current_file: dict[int, str] = {}
-
-# { group_chat_id : int }  — control message id (edit karne ke liye)
-_dp_ctrl_msg: dict[int, int] = {}
-
-
-# ─────────────────────────────────────────────
-#  Helpers
-# ─────────────────────────────────────────────
 
 def _dp_button(chat_id: int) -> InlineKeyboardMarkup:
     """Play Next button."""
@@ -79,7 +112,7 @@ def _dp_button(chat_id: int) -> InlineKeyboardMarkup:
 
 
 def _cleanup_file(chat_id: int):
-    """Purani downloaded file disk se delete karo — RAM free."""
+    """Purani downloaded file disk se delete karo."""
     path = _dp_current_file.pop(chat_id, None)
     if path and os.path.exists(path):
         try:
@@ -94,17 +127,14 @@ async def _fetch_random_track(chat_id: int, channel_id: int) -> tuple[Message, s
     Channel se ek random audio/video message uthao.
     Already played wale skip karo.
     Agar sab play ho gaye to played list reset karo (loop).
-    Returns: (pyrogram Message, file_title) ya (None, None)
     """
     played = _dp_played.setdefault(chat_id, set())
 
-    # Userbot client lo — bot channel history nahi padh sakta
     client = await _get_userbot(chat_id)
     if not client:
         logger.error(f"[DirectPlay] No userbot client available for {chat_id}")
         return None, None
 
-    # Channel ke messages iterate karo (userbot se)
     all_msgs = []
     try:
         async for msg in client.get_chat_history(channel_id, limit=200):
@@ -116,35 +146,31 @@ async def _fetch_random_track(chat_id: int, channel_id: int) -> tuple[Message, s
         logger.error(f"[DirectPlay] Channel access error {channel_id}: {e}")
         return None, None
     except FloodWait as fw:
+        logger.warning(f"[DirectPlay] FloodWait {fw.value}s during history fetch")
         await asyncio.sleep(fw.value)
         return None, None
     except Exception as e:
-        logger.error(f"[DirectPlay] get_chat_history error: {e}")
+        logger.error(f"[DirectPlay] get_chat_history error: {e}", exc_info=True)
         return None, None
 
     if not all_msgs:
         return None, None
 
-    # Unplayed wale filter karo
     unplayed = [m for m in all_msgs if m.id not in played]
-
-    # Sab play ho gaye? Reset karo
     if not unplayed:
         played.clear()
         unplayed = all_msgs
 
-    # Random pick
     chosen = random.choice(unplayed)
     played.add(chosen.id)
 
-    # Title nikalo
     media = chosen.audio or chosen.voice or chosen.video or chosen.document
     title = (
         getattr(media, "title", None)
         or getattr(media, "file_name", None)
         or f"Track #{chosen.id}"
     )
-    title = title[:40]  # Cap karo
+    title = title[:40]
 
     return chosen, title
 
@@ -162,10 +188,8 @@ async def _download_and_play(group_chat_id: int, status_msg: Message | None = No
     if not channel_id:
         return
 
-    # Purani file delete karo
     _cleanup_file(group_chat_id)
 
-    # Status update
     async def safe_edit(text: str):
         if status_msg:
             try:
@@ -177,7 +201,6 @@ async def _download_and_play(group_chat_id: int, status_msg: Message | None = No
 
     await safe_edit("🔎 <b>Channel se track dhundh raha hoon...</b>")
 
-    # Random track fetch karo
     msg, title = await _fetch_random_track(group_chat_id, channel_id)
     if not msg:
         await safe_edit(
@@ -188,7 +211,6 @@ async def _download_and_play(group_chat_id: int, status_msg: Message | None = No
 
     await safe_edit(f"⬇️ <b>Download ho raha hai:</b> <code>{title}</code>")
 
-    # Download — userbot se (bot channel files download nahi kar sakta)
     client = await _get_userbot(group_chat_id)
     if not client:
         await safe_edit("❌ Userbot client nahi mila! String session check karo.")
@@ -212,15 +234,15 @@ async def _download_and_play(group_chat_id: int, status_msg: Message | None = No
             await client.download_media(msg, file_name=file_path)
         except Exception as e:
             await safe_edit(f"❌ Download fail hua: <code>{e}</code>")
+            logger.error(f"[DirectPlay] Download fail after FloodWait: {e}")
             return
     except Exception as e:
         await safe_edit(f"❌ Download fail hua: <code>{e}</code>")
+        logger.error(f"[DirectPlay] Download fail: {e}")
         return
 
-    # Current file track karo (cleanup ke liye)
     _dp_current_file[group_chat_id] = file_path
 
-    # Duration format
     if duration >= 3600:
         dur_str = time.strftime("%H:%M:%S", time.gmtime(duration))
     elif duration > 0:
@@ -228,7 +250,6 @@ async def _download_and_play(group_chat_id: int, status_msg: Message | None = No
     else:
         dur_str = "?"
 
-    # Media object banao
     media = Media(
         id=file_id,
         title=title,
@@ -240,7 +261,6 @@ async def _download_and_play(group_chat_id: int, status_msg: Message | None = No
         video=is_video,
     )
 
-    # Play karo
     await safe_edit(f"▶️ <b>Play ho raha hai:</b> <code>{title}</code>")
 
     try:
@@ -251,6 +271,7 @@ async def _download_and_play(group_chat_id: int, status_msg: Message | None = No
         )
     except Exception as e:
         await safe_edit(f"❌ Play fail hua: <code>{e}</code>")
+        logger.error(f"[DirectPlay] play_media fail: {e}", exc_info=True)
         _cleanup_file(group_chat_id)
         return
 
@@ -273,7 +294,7 @@ async def _download_and_play(group_chat_id: int, status_msg: Message | None = No
             )
             return
         except Exception:
-            pass  # Edit fail to naya bhejo
+            pass  # Edit fail — naya bhejo
 
     try:
         sent = await app.send_message(
@@ -286,6 +307,9 @@ async def _download_and_play(group_chat_id: int, status_msg: Message | None = No
         pass
     except Exception as e:
         logger.warning(f"[DirectPlay] Control message send fail: {e}")
+
+    # ── Koi sleep loop nahi ──
+    # Auto-next ab calls.py ke StreamEnded → handle_stream_end() se hoga.
 
 
 # ─────────────────────────────────────────────
@@ -343,7 +367,7 @@ async def directplay_cmd(_, m: Message):
                 pass
         return
 
-    # ── START with channel_id ──
+    # ── START ──
     if len(m.command) < 2:
         try:
             await m.reply_text(
@@ -359,7 +383,6 @@ async def directplay_cmd(_, m: Message):
 
     raw = m.command[1].strip()
 
-    # Channel ID parse karo
     if raw.lstrip("-").isdigit():
         channel_id = int(raw)
     else:
@@ -376,7 +399,6 @@ async def directplay_cmd(_, m: Message):
                 pass
             return
 
-    # Channel verify karo
     try:
         ch_info = await app.get_chat(channel_id)
     except (ChannelInvalid, ChannelPrivate):
@@ -395,9 +417,8 @@ async def directplay_cmd(_, m: Message):
             pass
         return
 
-    # Save karo
     _dp_channels[m.chat.id] = channel_id
-    _dp_played.pop(m.chat.id, None)   # Naya session = fresh played list
+    _dp_played.pop(m.chat.id, None)
     _dp_ctrl_msg.pop(m.chat.id, None)
 
     try:
@@ -410,19 +431,17 @@ async def directplay_cmd(_, m: Message):
     except Exception:
         status_msg = None
 
-    # Play shuru karo
-    asyncio.create_task(_download_and_play(m.chat.id, status_msg))
+    asyncio.create_task(_safe_download_and_play(m.chat.id, status_msg))
 
 
 # ─────────────────────────────────────────────
-#  Callback — Play Next Button
+#  Callbacks
 # ─────────────────────────────────────────────
 
 @app.on_callback_query(filters.regex(r"^dp_next_(-?\d+)$"))
 async def directplay_next_cb(_, q: CallbackQuery):
     group_chat_id = int(q.matches[0].group(1))
 
-    # Sirf group members click kar sakein
     if q.message.chat.id != group_chat_id:
         await q.answer("❌ Wrong chat!", show_alert=True)
         return
@@ -433,7 +452,6 @@ async def directplay_next_cb(_, q: CallbackQuery):
 
     await q.answer("⏭ Next song aa raha hai...")
 
-    # Button disable karo temporarily
     try:
         await q.message.edit_reply_markup(
             InlineKeyboardMarkup(
@@ -443,7 +461,7 @@ async def directplay_next_cb(_, q: CallbackQuery):
     except Exception:
         pass
 
-    asyncio.create_task(_download_and_play(group_chat_id, q.message))
+    asyncio.create_task(_safe_download_and_play(group_chat_id, q.message))
 
 
 @app.on_callback_query(filters.regex(r"^dp_loading$"))
