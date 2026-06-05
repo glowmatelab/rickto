@@ -1,6 +1,11 @@
 """
 DirectPlay - Fixed single channel se random songs bajao
 Auto next - jab tak /stopdplay na karo tab tak bajata rahe
+
+FIXES:
+- asyncio.sleep() wala auto-next loop hataya (race condition tha)
+- Ab StreamEnded event se calls.py trigger karega handle_stream_end()
+- create_task mein exception logging add ki (silent crash fix)
 """
 
 import asyncio
@@ -23,6 +28,30 @@ _dp_played: dict[int, set] = {}
 _dp_current_file: dict[int, str] = {}
 _dp_ctrl_msg: dict[int, int] = {}
 _dp_active: set[int] = set()
+
+
+def is_dplay_active(chat_id: int) -> bool:
+    """calls.py check karega ki dplay chal raha hai ya nahi."""
+    return chat_id in _dp_active
+
+
+async def handle_stream_end(chat_id: int):
+    """
+    calls.py ke StreamEnded event se yeh call hoga.
+    Sleep loop ki zaroorat nahi — event hi trigger karega.
+    """
+    if chat_id not in _dp_active:
+        return
+    logger.info(f"[DirectPlay] StreamEnded received for {chat_id}, playing next...")
+    asyncio.create_task(_safe_download_and_play(chat_id))
+
+
+async def _safe_download_and_play(chat_id: int, status_msg=None):
+    """Wrapper — exceptions silently drop nahi honge ab."""
+    try:
+        await _download_and_play(chat_id, status_msg)
+    except Exception as e:
+        logger.error(f"[DirectPlay] Task crashed for {chat_id}: {e}", exc_info=True)
 
 
 def _dp_button(chat_id):
@@ -77,6 +106,7 @@ async def _download_and_play(group_chat_id: int, status_msg=None):
     client = await _get_userbot(group_chat_id)
     if not client:
         await safe_edit("❌ Userbot nahi mila!")
+        logger.error(f"[DirectPlay] No userbot for {group_chat_id}")
         return
 
     played = _dp_played.setdefault(group_chat_id, set())
@@ -89,13 +119,17 @@ async def _download_and_play(group_chat_id: int, status_msg=None):
                 all_msgs.append(msg)
     except (ChannelInvalid, ChannelPrivate) as e:
         await safe_edit(f"❌ Channel access error: <code>{e}</code>")
+        logger.error(f"[DirectPlay] Channel error {channel_id}: {e}")
         _dp_active.discard(group_chat_id)
         return
     except FloodWait as fw:
+        logger.warning(f"[DirectPlay] FloodWait {fw.value}s for {group_chat_id}")
         await asyncio.sleep(fw.value)
+        asyncio.create_task(_safe_download_and_play(group_chat_id))
         return
     except Exception as e:
         await safe_edit(f"❌ History fetch error: <code>{e}</code>")
+        logger.error(f"[DirectPlay] get_chat_history error: {e}", exc_info=True)
         return
 
     if not all_msgs:
@@ -130,9 +164,11 @@ async def _download_and_play(group_chat_id: int, status_msg=None):
             await client.download_media(chosen, file_name=file_path)
         except Exception as e:
             await safe_edit(f"❌ Download fail: <code>{e}</code>")
+            logger.error(f"[DirectPlay] Download fail after FloodWait: {e}")
             return
     except Exception as e:
         await safe_edit(f"❌ Download fail: <code>{e}</code>")
+        logger.error(f"[DirectPlay] Download fail: {e}")
         return
 
     _dp_current_file[group_chat_id] = file_path
@@ -172,24 +208,13 @@ async def _download_and_play(group_chat_id: int, status_msg=None):
     try:
         await tune.play_media(chat_id=group_chat_id, message=None, media=media)
     except Exception as e:
-        logger.error(f"[DirectPlay] Play fail: {e}")
+        logger.error(f"[DirectPlay] play_media fail: {e}", exc_info=True)
         _cleanup_file(group_chat_id)
         return
 
-    # Stream khatam hone ka wait, phir auto next
-    if duration > 0:
-        await asyncio.sleep(duration + 2)
-    else:
-        await asyncio.sleep(300)
-
-    # ── Double play fix ──
-    if group_chat_id not in _dp_active:
-        return  # Beech mein band kar diya tha
-
-    if await db.get_call(group_chat_id):
-        return  # VC abhi bhi chal rahi hai, double play mat karo
-
-    asyncio.create_task(_download_and_play(group_chat_id))
+    # ── Sleep loop HATA DIYA ──
+    # Pehle yahan asyncio.sleep(duration) tha jo race condition banata tha.
+    # Ab calls.py ka StreamEnded event handle_stream_end() ko call karega.
 
 
 # ── Commands ──
@@ -225,7 +250,7 @@ async def dplay_cmd(_, m: Message):
     except Exception:
         status_msg = None
 
-    asyncio.create_task(_download_and_play(m.chat.id, status_msg))
+    asyncio.create_task(_safe_download_and_play(m.chat.id, status_msg))
 
 
 @app.on_message(filters.command(["stopdplay", "enddplay"]) & filters.group & ~app.bl_users)
