@@ -336,11 +336,6 @@ async def demote_user(_, m: Message):
 
 
 # ============== WARN ==============
-
-warn_db = {}  # Simple in-memory warn store (MongoDB ke liye db mein add kar sakte ho)
-WARN_LIMIT = 3
-
-
 @app.on_message(filters.command("warn") & filters.group & ~app.bl_users)
 @lang.language()
 @admin_check
@@ -370,29 +365,11 @@ async def warn_user(_, m: Message):
     if target.id in app.sudoers:
         return await m.reply("<blockquote>❌ Sudo user ko warn nahi kar sakte!</blockquote>")
 
-    key = (m.chat.id, target.id)
-    warn_db[key] = warn_db.get(key, 0) + 1
-    count = warn_db[key]
-
-    if count >= WARN_LIMIT:
-        try:
-            await app.ban_chat_member(m.chat.id, target.id)
-            warn_db[key] = 0
-            return await m.reply(
-                f"<blockquote><u><b>🚫 ᴡᴀʀɴ ʟɪᴍɪᴛ ʀᴇᴀᴄʜᴇᴅ — ʙᴀɴɴᴇᴅ!</b></u>\n\n"
-                f"<b>ᴜꜱᴇʀ:</b> {target.mention}\n"
-                f"<b>{WARN_LIMIT}/{WARN_LIMIT} warns</b> ke baad ban ho gaya!</blockquote>"
-            )
-        except Exception as e:
-            return await m.reply(f"<blockquote>❌ Ban nahi hua: <code>{e}</code></blockquote>")
-
     await m.reply(
         f"<blockquote><u><b>⚠️ ᴜꜱᴇʀ ᴡᴀʀɴᴇᴅ</b></u>\n\n"
         f"<b>ᴜꜱᴇʀ:</b> {target.mention}\n"
-        f"<b>ᴡᴀʀɴꜱ:</b> {count}/{WARN_LIMIT}\n"
         f"<b>ʀᴇᴀꜱᴏɴ:</b> {reason}</blockquote>"
     )
-
 
 @app.on_message(filters.command("resetwarn") & filters.group & ~app.bl_users)
 @lang.language()
