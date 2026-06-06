@@ -1,9 +1,30 @@
 from pyrogram import filters, enums
-from pyrogram.types import Message
+from pyrogram.types import Message, ChatPermissions
 from pyrogram.errors import ChatAdminRequired, UserAdminInvalid
 
 from Elevenyts import app, lang
 from Elevenyts.helpers._admins import admin_check
+
+
+async def extract_target(m: Message):
+    """User extract karo — reply, username, ya user_id se"""
+    if m.reply_to_message and m.reply_to_message.from_user:
+        return m.reply_to_message.from_user
+    elif len(m.command) > 1:
+        input_val = m.command[1]
+        try:
+            # Pehle integer ID try karo
+            user_id = int(input_val)
+            return await app.get_users(user_id)
+        except ValueError:
+            pass
+        try:
+            # Username se try karo (@ ke saath ya bina)
+            username = input_val.lstrip("@")
+            return await app.get_users(username)
+        except Exception:
+            pass
+    return None
 
 
 # ============== BAN ==============
@@ -17,31 +38,27 @@ async def ban_user(_, m: Message):
     except:
         pass
 
-    target = None
     reason = "No reason provided"
-
     if m.reply_to_message and m.reply_to_message.from_user:
-        target = m.reply_to_message.from_user
         if len(m.command) > 1:
             reason = " ".join(m.command[1:])
-    elif len(m.command) > 1:
-        try:
-            target = await app.get_users(m.command[1])
-            if len(m.command) > 2:
-                reason = " ".join(m.command[2:])
-        except:
-            return await m.reply("<blockquote>❌ User nahi mila!</blockquote>")
-    else:
-        return await m.reply("<blockquote>ᴜꜱᴀɢᴇ: <code>/ban @user [reason]</code>\nya kisi message pe reply karo</blockquote>")
+    elif len(m.command) > 2:
+        reason = " ".join(m.command[2:])
+
+    target = await extract_target(m)
+    if not target:
+        return await m.reply("<blockquote>❌ User nahi mila! Reply karo ya ID/username do</blockquote>")
 
     if target.id in app.sudoers:
         return await m.reply("<blockquote>❌ Sudo user ko ban nahi kar sakte!</blockquote>")
+
+    name = target.first_name or str(target.id)
 
     try:
         await app.ban_chat_member(m.chat.id, target.id)
         await m.reply(
             f"<blockquote><u><b>🚫 ᴜꜱᴇʀ ʙᴀɴɴᴇᴅ</b></u>\n\n"
-            f"<b>ᴜꜱᴇʀ:</b> {target.mention}\n"
+            f"<b>ᴜꜱᴇʀ:</b> {name}\n"
             f"<b>ɪᴅ:</b> <code>{target.id}</code>\n"
             f"<b>ʀᴇᴀꜱᴏɴ:</b> {reason}</blockquote>"
         )
@@ -64,23 +81,17 @@ async def unban_user(_, m: Message):
     except:
         pass
 
-    target = None
+    target = await extract_target(m)
+    if not target:
+        return await m.reply("<blockquote>❌ User nahi mila! Reply karo ya ID/username do</blockquote>")
 
-    if m.reply_to_message and m.reply_to_message.from_user:
-        target = m.reply_to_message.from_user
-    elif len(m.command) > 1:
-        try:
-            target = await app.get_users(m.command[1])
-        except:
-            return await m.reply("<blockquote>❌ User nahi mila!</blockquote>")
-    else:
-        return await m.reply("<blockquote>ᴜꜱᴀɢᴇ: <code>/unban @user</code>\nya kisi message pe reply karo</blockquote>")
+    name = target.first_name or str(target.id)
 
     try:
         await app.unban_chat_member(m.chat.id, target.id)
         await m.reply(
             f"<blockquote><u><b>✅ ᴜꜱᴇʀ ᴜɴʙᴀɴɴᴇᴅ</b></u>\n\n"
-            f"<b>ᴜꜱᴇʀ:</b> {target.mention}\n"
+            f"<b>ᴜꜱᴇʀ:</b> {name}\n"
             f"<b>ɪᴅ:</b> <code>{target.id}</code></blockquote>"
         )
     except ChatAdminRequired:
@@ -100,32 +111,28 @@ async def kick_user(_, m: Message):
     except:
         pass
 
-    target = None
     reason = "No reason provided"
-
     if m.reply_to_message and m.reply_to_message.from_user:
-        target = m.reply_to_message.from_user
         if len(m.command) > 1:
             reason = " ".join(m.command[1:])
-    elif len(m.command) > 1:
-        try:
-            target = await app.get_users(m.command[1])
-            if len(m.command) > 2:
-                reason = " ".join(m.command[2:])
-        except:
-            return await m.reply("<blockquote>❌ User nahi mila!</blockquote>")
-    else:
-        return await m.reply("<blockquote>ᴜꜱᴀɢᴇ: <code>/kick @user [reason]</code>\nya kisi message pe reply karo</blockquote>")
+    elif len(m.command) > 2:
+        reason = " ".join(m.command[2:])
+
+    target = await extract_target(m)
+    if not target:
+        return await m.reply("<blockquote>❌ User nahi mila! Reply karo ya ID/username do</blockquote>")
 
     if target.id in app.sudoers:
         return await m.reply("<blockquote>❌ Sudo user ko kick nahi kar sakte!</blockquote>")
 
+    name = target.first_name or str(target.id)
+
     try:
         await app.ban_chat_member(m.chat.id, target.id)
-        await app.unban_chat_member(m.chat.id, target.id)  # Kick = ban + turant unban
+        await app.unban_chat_member(m.chat.id, target.id)
         await m.reply(
             f"<blockquote><u><b>👢 ᴜꜱᴇʀ ᴋɪᴄᴋᴇᴅ</b></u>\n\n"
-            f"<b>ᴜꜱᴇʀ:</b> {target.mention}\n"
+            f"<b>ᴜꜱᴇʀ:</b> {name}\n"
             f"<b>ɪᴅ:</b> <code>{target.id}</code>\n"
             f"<b>ʀᴇᴀꜱᴏɴ:</b> {reason}</blockquote>"
         )
@@ -148,35 +155,31 @@ async def mute_user(_, m: Message):
     except:
         pass
 
-    target = None
     reason = "No reason provided"
-
     if m.reply_to_message and m.reply_to_message.from_user:
-        target = m.reply_to_message.from_user
         if len(m.command) > 1:
             reason = " ".join(m.command[1:])
-    elif len(m.command) > 1:
-        try:
-            target = await app.get_users(m.command[1])
-            if len(m.command) > 2:
-                reason = " ".join(m.command[2:])
-        except:
-            return await m.reply("<blockquote>❌ User nahi mila!</blockquote>")
-    else:
-        return await m.reply("<blockquote>ᴜꜱᴀɢᴇ: <code>/mute @user [reason]</code>\nya kisi message pe reply karo</blockquote>")
+    elif len(m.command) > 2:
+        reason = " ".join(m.command[2:])
+
+    target = await extract_target(m)
+    if not target:
+        return await m.reply("<blockquote>❌ User nahi mila! Reply karo ya ID/username do</blockquote>")
 
     if target.id in app.sudoers:
         return await m.reply("<blockquote>❌ Sudo user ko mute nahi kar sakte!</blockquote>")
+
+    name = target.first_name or str(target.id)
 
     try:
         await app.restrict_chat_member(
             m.chat.id,
             target.id,
-            enums.ChatPermissions()  # Sabhi permissions remove = mute
+            ChatPermissions()
         )
         await m.reply(
             f"<blockquote><u><b>🔇 ᴜꜱᴇʀ ᴍᴜᴛᴇᴅ</b></u>\n\n"
-            f"<b>ᴜꜱᴇʀ:</b> {target.mention}\n"
+            f"<b>ᴜꜱᴇʀ:</b> {name}\n"
             f"<b>ɪᴅ:</b> <code>{target.id}</code>\n"
             f"<b>ʀᴇᴀꜱᴏɴ:</b> {reason}</blockquote>"
         )
@@ -199,23 +202,17 @@ async def unmute_user(_, m: Message):
     except:
         pass
 
-    target = None
+    target = await extract_target(m)
+    if not target:
+        return await m.reply("<blockquote>❌ User nahi mila! Reply karo ya ID/username do</blockquote>")
 
-    if m.reply_to_message and m.reply_to_message.from_user:
-        target = m.reply_to_message.from_user
-    elif len(m.command) > 1:
-        try:
-            target = await app.get_users(m.command[1])
-        except:
-            return await m.reply("<blockquote>❌ User nahi mila!</blockquote>")
-    else:
-        return await m.reply("<blockquote>ᴜꜱᴀɢᴇ: <code>/unmute @user</code>\nya kisi message pe reply karo</blockquote>")
+    name = target.first_name or str(target.id)
 
     try:
         await app.restrict_chat_member(
             m.chat.id,
             target.id,
-            enums.ChatPermissions(
+            ChatPermissions(
                 can_send_messages=True,
                 can_send_media_messages=True,
                 can_send_other_messages=True,
@@ -224,7 +221,7 @@ async def unmute_user(_, m: Message):
         )
         await m.reply(
             f"<blockquote><u><b>🔊 ᴜꜱᴇʀ ᴜɴᴍᴜᴛᴇᴅ</b></u>\n\n"
-            f"<b>ᴜꜱᴇʀ:</b> {target.mention}\n"
+            f"<b>ᴜꜱᴇʀ:</b> {name}\n"
             f"<b>ɪᴅ:</b> <code>{target.id}</code></blockquote>"
         )
     except ChatAdminRequired:
@@ -244,22 +241,18 @@ async def promote_user(_, m: Message):
     except:
         pass
 
-    target = None
     title = ""
-
     if m.reply_to_message and m.reply_to_message.from_user:
-        target = m.reply_to_message.from_user
         if len(m.command) > 1:
             title = " ".join(m.command[1:])
-    elif len(m.command) > 1:
-        try:
-            target = await app.get_users(m.command[1])
-            if len(m.command) > 2:
-                title = " ".join(m.command[2:])
-        except:
-            return await m.reply("<blockquote>❌ User nahi mila!</blockquote>")
-    else:
-        return await m.reply("<blockquote>ᴜꜱᴀɢᴇ: <code>/promote @user [title]</code>\nya kisi message pe reply karo</blockquote>")
+    elif len(m.command) > 2:
+        title = " ".join(m.command[2:])
+
+    target = await extract_target(m)
+    if not target:
+        return await m.reply("<blockquote>❌ User nahi mila! Reply karo ya ID/username do</blockquote>")
+
+    name = target.first_name or str(target.id)
 
     try:
         await app.promote_chat_member(
@@ -279,10 +272,9 @@ async def promote_user(_, m: Message):
                 await app.set_administrator_title(m.chat.id, target.id, title)
             except:
                 pass
-
         await m.reply(
             f"<blockquote><u><b>⭐ ᴜꜱᴇʀ ᴘʀᴏᴍᴏᴛᴇᴅ</b></u>\n\n"
-            f"<b>ᴜꜱᴇʀ:</b> {target.mention}\n"
+            f"<b>ᴜꜱᴇʀ:</b> {name}\n"
             f"<b>ɪᴅ:</b> <code>{target.id}</code>"
             + (f"\n<b>ᴛɪᴛʟᴇ:</b> {title}" if title else "")
             + "</blockquote>"
@@ -304,27 +296,21 @@ async def demote_user(_, m: Message):
     except:
         pass
 
-    target = None
+    target = await extract_target(m)
+    if not target:
+        return await m.reply("<blockquote>❌ User nahi mila! Reply karo ya ID/username do</blockquote>")
 
-    if m.reply_to_message and m.reply_to_message.from_user:
-        target = m.reply_to_message.from_user
-    elif len(m.command) > 1:
-        try:
-            target = await app.get_users(m.command[1])
-        except:
-            return await m.reply("<blockquote>❌ User nahi mila!</blockquote>")
-    else:
-        return await m.reply("<blockquote>ᴜꜱᴀɢᴇ: <code>/demote @user</code>\nYa kisi message pe reply karo</blockquote>")
+    name = target.first_name or str(target.id)
 
     try:
         await app.promote_chat_member(
             m.chat.id,
             target.id,
-            privileges=enums.ChatPrivileges()  # Sabhi privileges remove
+            privileges=enums.ChatPrivileges()
         )
         await m.reply(
             f"<blockquote><u><b>🔽 ᴜꜱᴇʀ ᴅᴇᴍᴏᴛᴇᴅ</b></u>\n\n"
-            f"<b>ᴜꜱᴇʀ:</b> {target.mention}\n"
+            f"<b>ᴜꜱᴇʀ:</b> {name}\n"
             f"<b>ɪᴅ:</b> <code>{target.id}</code></blockquote>"
         )
     except ChatAdminRequired:
@@ -336,6 +322,7 @@ async def demote_user(_, m: Message):
 
 
 # ============== WARN ==============
+
 @app.on_message(filters.command("warn") & filters.group & ~app.bl_users)
 @lang.language()
 @admin_check
@@ -345,56 +332,25 @@ async def warn_user(_, m: Message):
     except:
         pass
 
-    target = None
     reason = "No reason provided"
-
     if m.reply_to_message and m.reply_to_message.from_user:
-        target = m.reply_to_message.from_user
         if len(m.command) > 1:
             reason = " ".join(m.command[1:])
-    elif len(m.command) > 1:
-        try:
-            target = await app.get_users(m.command[1])
-            if len(m.command) > 2:
-                reason = " ".join(m.command[2:])
-        except:
-            return await m.reply("<blockquote>❌ User nahi mila!</blockquote>")
-    else:
-        return await m.reply("<blockquote>ᴜꜱᴀɢᴇ: <code>/warn @user [reason]</code>\nya kisi message pe reply karo</blockquote>")
+    elif len(m.command) > 2:
+        reason = " ".join(m.command[2:])
+
+    target = await extract_target(m)
+    if not target:
+        return await m.reply("<blockquote>❌ User nahi mila! Reply karo ya ID/username do</blockquote>")
 
     if target.id in app.sudoers:
         return await m.reply("<blockquote>❌ Sudo user ko warn nahi kar sakte!</blockquote>")
 
+    name = target.first_name or str(target.id)
+
     await m.reply(
         f"<blockquote><u><b>⚠️ ᴜꜱᴇʀ ᴡᴀʀɴᴇᴅ</b></u>\n\n"
-        f"<b>ᴜꜱᴇʀ:</b> {target.mention}\n"
+        f"<b>ᴜꜱᴇʀ:</b> {name}\n"
+        f"<b>ɪᴅ:</b> <code>{target.id}</code>\n"
         f"<b>ʀᴇᴀꜱᴏɴ:</b> {reason}</blockquote>"
-    )
-
-@app.on_message(filters.command("resetwarn") & filters.group & ~app.bl_users)
-@lang.language()
-@admin_check
-async def reset_warn(_, m: Message):
-    try:
-        await m.delete()
-    except:
-        pass
-
-    target = None
-
-    if m.reply_to_message and m.reply_to_message.from_user:
-        target = m.reply_to_message.from_user
-    elif len(m.command) > 1:
-        try:
-            target = await app.get_users(m.command[1])
-        except:
-            return await m.reply("<blockquote>❌ User nahi mila!</blockquote>")
-    else:
-        return await m.reply("<blockquote>ᴜꜱᴀɢᴇ: <code>/resetwarn @user</code></blockquote>")
-
-    key = (m.chat.id, target.id)
-    warn_db[key] = 0
-    await m.reply(
-        f"<blockquote><u><b>✅ ᴡᴀʀɴꜱ ʀᴇꜱᴇᴛ</b></u>\n\n"
-        f"<b>ᴜꜱᴇʀ:</b> {target.mention} ke sabhi warns clear ho gaye!</blockquote>"
     )
