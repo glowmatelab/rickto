@@ -388,6 +388,19 @@ class MongoDB:
             {"$set": {"enabled": enabled}},
             upsert=True,
         )
+    # PLAY MESSAGE METHODS
+    async def get_playmessage(self, chat_id: int) -> bool:
+        """Get play message status for a chat. Default is True (ON)."""
+        doc = await self.cache.find_one({"_id": f"playmessage_{chat_id}"})
+        return doc.get("enabled", True) if doc else True
+
+    async def set_playmessage(self, chat_id: int, enabled: bool) -> None:
+        """Enable or disable play message for a chat."""
+        await self.cache.update_one(
+            {"_id": f"playmessage_{chat_id}"},
+            {"$set": {"enabled": enabled}},
+            upsert=True,
+        )
 
     # LOOP MODE METHODS
     async def get_loop(self, chat_id: int) -> int:
