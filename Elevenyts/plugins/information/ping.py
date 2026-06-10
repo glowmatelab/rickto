@@ -56,3 +56,23 @@ async def _ping(_, m: types.Message):
             text=caption_text,
             reply_markup=buttons.ping_markup(m.lang["support"]),
         )
+@app.on_message(filters.command("del") & ~app.bl_users)
+@lang.language()
+async def _delete(_, m: types.Message):
+    try:
+        await m.delete()
+    except Exception:
+        pass
+    
+    if not m.reply_to_message:
+        return
+    
+    try:
+        await m.reply_to_message.delete()
+    except Exception:
+        sent = await m.reply_text("❌ **Delete karne ki permission nahi hai!**")
+        await asyncio.sleep(3)
+        try:
+            await sent.delete()
+        except Exception:
+            pass
