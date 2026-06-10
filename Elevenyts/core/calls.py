@@ -378,16 +378,18 @@ class TgCall(PyTgCalls):
 
                 else:
 
-                    sent_photo = await self._send_photo_with_retry(
-                        chat_id=target_chat_for_messages,
-                        photo=_thumb,
-                        caption=text,
-                        reply_markup=keyboard,
-                    )
-
-                    if sent_photo:
-                        media.message_id = sent_photo.id
-
+                    play_msg_enabled = await db.get_playmessage(target_chat_for_messages)
+                
+                    if play_msg_enabled:
+                        sent_photo = await self._send_photo_with_retry(
+                            chat_id=target_chat_for_messages,
+                            photo=_thumb,
+                            caption=text,
+                            reply_markup=keyboard,
+                        )
+                
+                        if sent_photo:
+                            media.message_id = sent_photo.id
                 # 👇 YE 6 LINES ADD KARO
                 try:
                     from Elevenyts.plugins.settings.partymode import PARTY_STICKERS, party_chats
