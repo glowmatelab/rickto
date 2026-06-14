@@ -1,13 +1,14 @@
+import random
+import asyncio
+import logging
 from pyrogram import filters
 from pyrogram import types
 from pyrogram.errors import FloodWait, MessageIdInvalid, MessageDeleteForbidden, ChatSendPlainForbidden, ChatWriteForbidden
-
 from Elevenyts import tune, app, config, db, lang, queue, tg, yt
 from Elevenyts.core.spotify import is_spotify, get_track, get_playlist
 from Elevenyts.helpers import buttons, utils
 from Elevenyts.helpers._play import checkUB
-import asyncio
-import logging
+
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +137,7 @@ async def play_hndlr(
                     f"Error: {error_str}</blockquote>"
                 )
 
-    play_emoji = m.lang["play_emoji"]
+    play_emoji = random.choice(m.lang["play_emoji"])
     
     try:
         sent = await safe_reply(m, m.lang["play_searching"].format(play_emoji))
@@ -304,7 +305,7 @@ async def play_hndlr(
             message_chat_id=message_chat_id if chat_id != message_chat_id else None
         )
         try:
-            emoji = m.lang["play_emoji"]
+            emoji = random.choice(m.lang["play_emoji"])
             await m.react(emoji)
         except Exception:
             pass
