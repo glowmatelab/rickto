@@ -132,7 +132,6 @@ async def health_check(_, m: types.Message):
 ━━━━━━━━━━━━━━━━━━━━
 <b>🌐 YouTube Download API</b>
   {status_icon(api_ok)} <b>Status:</b> {api_msg}
-  <b>URL:</b> <code>{getattr(config, 'YOUTUBE_API_URL', 'N/A')}</code>
 
 ━━━━━━━━━━━━━━━━━━━━
 <b>💾 Disk Usage</b>
