@@ -5,7 +5,7 @@ import asyncio
 import aiohttp
 import psutil
 
-from pyrogram import filters, types
+from pyrogram import filters, types, enums
 from Elevenyts import app, config, db, queue, boot, lang
 
 
@@ -45,17 +45,21 @@ async def check_youtube_api() -> tuple[bool, str, float]:
         return False, str(e)[:60], -1
 
 
-def get_disk_info() -> tuple[float, float, float, bool]:
+def get_disk_info() -> tuple[float, float, float, float, bool]:
     """downloads/ folder + total disk usage."""
     total, used, free = shutil.disk_usage("/")
     downloads_size = 0
     dl_dir = "downloads"
     if os.path.exists(dl_dir):
-        for f in os.scandir(dl_dir):
-            try:
-                downloads_size += f.stat().st_size
-            except:
-                pass
+        try:
+            with os.scandir(dl_dir) as entries:
+                for f in entries:
+                    try:
+                        downloads_size += f.stat().st_size
+                    except:
+                        pass
+        except:
+            pass
     disk_critical = (used / total) > 0.88  # 88% se zyada = danger
     return total, used, free, downloads_size, disk_critical
 
@@ -169,4 +173,5 @@ async def health_check(_, m: types.Message):
 
     report += "\n</blockquote>"
 
-    await sent.edit_text(report, parse_mode="html")
+    # Pyrogram enums use karke safely HTML parse karega bina crash huye
+    await sent.edit_text(report, parse_mode=enums.ParseMode.HTML)
