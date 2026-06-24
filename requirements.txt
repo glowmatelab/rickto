@@ -14,3 +14,4 @@ ytmusicapi
 instaloader
 pytz
 gtts
+telegramify-markdown>=1.2.0
