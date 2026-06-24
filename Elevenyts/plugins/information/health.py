@@ -17,14 +17,13 @@ def fmt_bytes(b):
     return f"{b:.1f} GB"
 
 
-def status_icon(ok): return "✅" if ok else "❌"
+def status_icon(ok): return "🟢" if ok else "🔴"
 
 
 async def check_youtube_api() -> tuple[bool, str, float]:
-    """API ka /health endpoint ping karo, latency measure karo."""
     url = getattr(config, "YOUTUBE_API_URL", "").rstrip("/")
     if not url:
-        return False, "YOUTUBE_API_URL set nahi hai", -1
+        return False, "Not Set", -1
     try:
         start = time.monotonic()
         async with aiohttp.ClientSession() as s:
@@ -36,17 +35,16 @@ async def check_youtube_api() -> tuple[bool, str, float]:
                 if r.status == 200:
                     return True, f"Online ({latency}ms)", latency
                 else:
-                    return False, f"HTTP {r.status} ({latency}ms)", latency
+                    return False, f"HTTP {r.status}", latency
     except asyncio.TimeoutError:
-        return False, "Timeout (8s se zyada)", -1
+        return False, "Timeout", -1
     except aiohttp.ClientConnectorError:
-        return False, "Connection refused / unreachable", -1
+        return False, "Unreachable", -1
     except Exception as e:
-        return False, str(e)[:60], -1
+        return False, "Error", -1
 
 
 def get_disk_info() -> tuple[float, float, float, float, bool]:
-    """downloads/ folder + total disk usage."""
     total, used, free = shutil.disk_usage("/")
     downloads_size = 0
     dl_dir = "downloads"
@@ -60,7 +58,7 @@ def get_disk_info() -> tuple[float, float, float, float, bool]:
                         pass
         except:
             pass
-    disk_critical = (used / total) > 0.88  # 88% se zyada = danger
+    disk_critical = (used / total) > 0.88
     return total, used, free, downloads_size, disk_critical
 
 
@@ -71,7 +69,6 @@ def get_ram_info() -> tuple[float, float, bool]:
 
 
 def get_queue_health() -> tuple[int, int, list]:
-    """Saare active chats ke queues check karo."""
     total_queued = 0
     overloaded_chats = []
     active_chat_ids = list(db.active_calls.keys())
@@ -100,7 +97,7 @@ async def health_check(_, m: types.Message):
     except:
         pass
 
-    sent = await m.reply_text("🔍 Running health check...")
+    sent = await m.reply_text("📊 <i>Generating native table matrix...</i>", parse_mode=enums.ParseMode.HTML)
 
     # --- Checks ---
     api_ok, api_msg, api_latency = await check_youtube_api()
@@ -109,68 +106,77 @@ async def health_check(_, m: types.Message):
     cpu = psutil.cpu_percent(interval=0.5)
     total_queued, active_chats, overloaded = get_queue_health()
 
-    # Overall status
     issues = []
-    if not api_ok:
-        issues.append("YouTube API down")
-    if disk_critical:
-        issues.append("Disk almost full")
-    if ram_critical:
-        issues.append("RAM overloaded")
+    if not api_ok: issues.append("YouTube API Down")
+    if disk_critical: issues.append("Disk space critical")
+    if ram_critical: issues.append("RAM overload")
+    if overloaded: issues.append(f"{len(overloaded)} chats overloaded")
+    if cpu > 85: issues.append(f"CPU Spike ({cpu}%)")
+
+    overall_status = "🟢 OPERATIONAL" if not issues else "🔴 ISSUES DETECTED"
+
+    # --- NATIVE TELEGRAM TABLE (HTML Format) ---
+    report = f"""<blockquote><b>🏥 RICKTO SERVER DIAGNOSTICS</b>
+Status: <b>{overall_status}</b>
+Uptime: <code>{uptime_str()}</code></blockquote>
+
+<b>🖥️ SYSTEM METRICS TABLE:</b>
+<table>
+<tr>
+  <th>Component</th>
+  <th>Status</th>
+  <th>Usage / Info</th>
+</tr>
+<tr>
+  <td><b>YouTube API</b></td>
+  <td>{status_icon(api_ok)}</td>
+  <td><code>{api_msg}</code></td>
+</tr>
+<tr>
+  <td><b>CPU Core</b></td>
+  <td>{status_icon(cpu < 85)}</td>
+  <td><code>{cpu}%</code></td>
+</tr>
+<tr>
+  <td><b>RAM (Memory)</b></td>
+  <td>{status_icon(not ram_critical)}</td>
+  <td><code>{round(ram_used/ram_total*100, 1)}%</code></td>
+</tr>
+<tr>
+  <td><b>Disk (Storage)</b></td>
+  <td>{status_icon(not disk_critical)}</td>
+  <td><code>{round(used_disk/total_disk*100, 1)}%</code></td>
+</tr>
+<tr>
+  <td><b>Cache Size</b></td>
+  <td>📦</td>
+  <td><code>{fmt_bytes(dl_size)}</code></td>
+</tr>
+<tr>
+  <td><b>Active Rooms</b></td>
+  <td>🎵</td>
+  <td><code>{active_chats} chats</code></td>
+</tr>
+<tr>
+  <td><b>Total Queue</b></td>
+  <td>📜</td>
+  <td><code>{total_queued} songs</code></td>
+</tr>
+</table>
+
+<b>🌐 API Endpoint Hidden:</b> <spoiler>{getattr(config, 'YOUTUBE_API_URL', 'Not Set')}</spoiler>"""
+
+    # Overloaded chats ke liye expandable dropdown block
     if overloaded:
-        issues.append(f"{len(overloaded)} chat(s) queue overloaded (10+)")
-    if cpu > 85:
-        issues.append(f"CPU high ({cpu}%)")
-
-    overall = "🟢 All systems OK" if not issues else "🔴 Issues detected"
-
-    # --- Report build ---
-    report = f"""<blockquote><b>🏥 RICKTO HEALTH REPORT</b></blockquote>
-
-<b>Status:</b> {overall}
-
-━━━━━━━━━━━━━━━━━━━━
-<b>🌐 YouTube Download API</b>
-  {status_icon(api_ok)} <b>Status:</b> {api_msg}
-
-━━━━━━━━━━━━━━━━━━━━
-<b>💾 Disk Usage</b>
-  {status_icon(not disk_critical)} <b>Total:</b> {fmt_bytes(total_disk)}
-  <b>Used:</b> {fmt_bytes(used_disk)} ({round(used_disk/total_disk*100, 1)}%)
-  <b>Free:</b> {fmt_bytes(free_disk)}
-  <b>Downloads folder:</b> {fmt_bytes(dl_size)}
-  {'⚠️ <b>Disk critical! /restart karo ya downloads clean karo</b>' if disk_critical else ''}
-
-━━━━━━━━━━━━━━━━━━━━
-<b>🧠 RAM</b>
-  {status_icon(not ram_critical)} {fmt_bytes(ram_used)} / {fmt_bytes(ram_total)} ({round(ram_used/ram_total*100,1)}%)
-  {'⚠️ <b>RAM critical! Bot slow ho sakta hai</b>' if ram_critical else ''}
-
-━━━━━━━━━━━━━━━━━━━━
-<b>⚙️ CPU</b>
-  {status_icon(cpu < 85)} {cpu}%
-
-━━━━━━━━━━━━━━━━━━━━
-<b>🎵 Queue Status</b>
-  <b>Active voice chats:</b> {active_chats}
-  <b>Total songs queued:</b> {total_queued}"""
-
-    if overloaded:
-        report += "\n  ⚠️ <b>Overloaded chats (10+ songs):</b>"
+        report += "\n\n<blockquote expandable><b>⚠️ OVERLOADED CHATS (10+)</b>"
         for cid, cnt in overloaded[:5]:
-            report += f"\n    • <code>{cid}</code> → {cnt} songs"
+            report += f"\n• <code>{cid}</code> ➜ <b>{cnt} songs</b>"
+        report += "</blockquote>"
 
-    report += f"""
-
-━━━━━━━━━━━━━━━━━━━━
-<b>🕐 Uptime:</b> {uptime_str()}"""
-
+    # System logs listing
     if issues:
-        report += "\n\n━━━━━━━━━━━━━━━━━━━━\n<b>⚠️ Issues Summary:</b>"
-        for i in issues:
-            report += f"\n  • {i}"
+        report += "\n\n📋 <b>CRITICAL ALERTS:</b>"
+        for issue in issues:
+            report += f"\n❌ <i>{issue}</i>"
 
-    report += "\n</blockquote>"
-
-    # Pyrogram enums use karke safely HTML parse karega bina crash huye
     await sent.edit_text(report, parse_mode=enums.ParseMode.HTML)
