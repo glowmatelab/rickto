@@ -5,7 +5,7 @@ import asyncio
 import aiohttp
 import psutil
 
-from pyrogram import filters, types, enums
+from pyrogram import filters, types
 from Elevenyts import app, config, db, queue, boot, lang
 
 
@@ -86,7 +86,7 @@ def uptime_str() -> str:
     return f"{h}h {m}m {s}s"
 
 
-# ─── Rich Text helpers ────────────────────────────────────────────────────────
+# ── Rich Text helpers ──────────────────────────────────────────────────────────
 
 def rt_plain(text: str) -> dict:
     return {"@type": "richTextPlain", "text": text}
@@ -98,13 +98,12 @@ def rt_code(text: str) -> dict:
     return {"@type": "richTextCode", "text": rt_plain(text)}
 
 def rt_concat(*parts) -> dict:
-    """Multiple RichText elements joined together."""
     return {"@type": "richTexts", "texts": list(parts)}
 
 
-# ─── RichBlock helpers ────────────────────────────────────────────────────────
+# ── RichBlock helpers ──────────────────────────────────────────────────────────
 
-def rb_heading(text: str, level: int = 1) -> dict:
+def rb_heading(text: str, level: int = 2) -> dict:
     return {
         "@type": "richBlockSectionHeading",
         "text": rt_plain(text),
@@ -116,6 +115,13 @@ def rb_paragraph(rich_text: dict) -> dict:
 
 def rb_divider() -> dict:
     return {"@type": "richBlockDivider"}
+
+def rb_block_quote(text: str) -> dict:
+    return {
+        "@type": "richBlockBlockQuotation",
+        "text": rt_plain(text),
+        "credit": rt_plain(""),
+    }
 
 def table_cell(content: dict, is_header: bool = False) -> dict:
     return {
@@ -129,25 +135,21 @@ def table_cell(content: dict, is_header: bool = False) -> dict:
     }
 
 def rb_table(headers: list[str], rows: list[list[dict]]) -> dict:
-    """
-    headers : list of plain strings  → header row
-    rows    : list of rows, each row is a list of RichText dicts
-    """
     header_row = [table_cell(rt_bold(h), is_header=True) for h in headers]
-    data_rows  = [
-        [table_cell(cell) for cell in row]
-        for row in rows
-    ]
+    data_rows  = [[table_cell(cell) for cell in row] for row in rows]
     return {
         "@type": "richBlockTable",
-        "caption": {"@type": "richBlockCaption", "text": rt_plain(""), "credit": rt_plain("")},
+        "caption": {
+            "@type": "richBlockCaption",
+            "text": rt_plain(""),
+            "credit": rt_plain(""),
+        },
         "cells": [header_row] + data_rows,
         "is_bordered": True,
         "is_striped": True,
     }
 
 def rb_details(header: str, blocks: list[dict], is_open: bool = False) -> dict:
-    """Collapsible / expandable block."""
     return {
         "@type": "richBlockDetails",
         "header": rt_plain(header),
@@ -155,18 +157,11 @@ def rb_details(header: str, blocks: list[dict], is_open: bool = False) -> dict:
         "is_open": is_open,
     }
 
-def rb_block_quote(text: str) -> dict:
-    return {
-        "@type": "richBlockBlockQuotation",
-        "text": rt_plain(text),
-        "credit": rt_plain(""),
-    }
 
+# ── Raw Bot API calls (Pyrogram/Kurigram ne sendRichMessage wrap nahi kiya) ───
 
-# ─── Raw Bot API call (Pyrogram doesn't wrap sendRichMessage yet) ─────────────
-
-async def send_rich_message(chat_id: int, blocks: list[dict], reply_to: int | None = None) -> dict:
-    token = app.token  # Pyrogram rakhta hai bot token yahan
+async def send_rich_message(chat_id: int, blocks: list[dict]) -> dict:
+    token = config.BOT_TOKEN
     payload = {
         "chat_id": chat_id,
         "rich_message": {
@@ -174,53 +169,28 @@ async def send_rich_message(chat_id: int, blocks: list[dict], reply_to: int | No
             "blocks": blocks,
         },
     }
-    if reply_to:
-        payload["reply_to_message_id"] = reply_to
-
     url = f"https://api.telegram.org/bot{token}/sendRichMessage"
     async with aiohttp.ClientSession() as session:
         async with session.post(url, json=payload) as resp:
             return await resp.json()
 
 
-async def edit_rich_message(chat_id: int, message_id: int, blocks: list[dict]) -> dict:
-    token = app.token
-    payload = {
-        "chat_id": chat_id,
-        "message_id": message_id,
-        "rich_message": {
-            "@type": "inputRichMessage",
-            "blocks": blocks,
-        },
-    }
-    url = f"https://api.telegram.org/bot{token}/editMessageText"
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url, json=payload) as resp:
-            return await resp.json()
+# ── /health command ────────────────────────────────────────────────────────────
 
-
-# ─── /health command ──────────────────────────────────────────────────────────
-
-@app.on_message(
-    filters.command("health") & filters.user(app.owner)
-)
+@app.on_message(filters.command("health") & filters.user(app.owner))
 async def health_check(_, m: types.Message):
     try:
         await m.delete()
     except Exception:
         pass
 
-    # Loading placeholder (plain message, baad mein rich se replace karenge)
-    sent = await m.reply_text(
-        "📊 <i>Generating diagnostics...</i>",
-        parse_mode=enums.ParseMode.HTML
-    )
+    sent = await m.reply_text("📊 <i>Generating diagnostics...</i>")
 
-    # ── Data collect ──────────────────────────────────────────────────────────
-    api_ok, api_msg, _     = await check_youtube_api()
-    total_disk, used_disk, free_disk, dl_size, disk_critical = get_disk_info()
+    # ── Data collect ───────────────────────────────────────────────────────────
+    api_ok, api_msg, _              = await check_youtube_api()
+    total_disk, used_disk, _, dl_size, disk_critical = get_disk_info()
     ram_used, ram_total, ram_critical = get_ram_info()
-    cpu                    = psutil.cpu_percent(interval=0.5)
+    cpu                             = psutil.cpu_percent(interval=0.5)
     total_queued, active_chats, overloaded = get_queue_health()
 
     issues = []
@@ -232,54 +202,57 @@ async def health_check(_, m: types.Message):
 
     overall = "🟢 OPERATIONAL" if not issues else "🔴 ISSUES DETECTED"
 
-    # ── Table rows ────────────────────────────────────────────────────────────
+    # ── Table rows ─────────────────────────────────────────────────────────────
     rows = [
-        [rt_plain("YouTube API"),   rt_plain(status_icon(api_ok)),          rt_code(api_msg)],
-        [rt_plain("CPU Core"),      rt_plain(status_icon(cpu < 85)),         rt_code(f"{cpu}%")],
-        [rt_plain("RAM Memory"),    rt_plain(status_icon(not ram_critical)),  rt_code(f"{round(ram_used/ram_total*100, 1)}%")],
-        [rt_plain("Disk Storage"),  rt_plain(status_icon(not disk_critical)), rt_code(f"{round(used_disk/total_disk*100, 1)}%")],
-        [rt_plain("Cache Size"),    rt_plain("📦"),                           rt_code(fmt_bytes(dl_size))],
-        [rt_plain("Active Rooms"),  rt_plain("🎵"),                           rt_code(f"{active_chats} chats")],
-        [rt_plain("Total Queue"),   rt_plain("📜"),                           rt_code(f"{total_queued} songs")],
+        [rt_plain("YouTube API"),  rt_plain(status_icon(api_ok)),           rt_code(api_msg)],
+        [rt_plain("CPU"),          rt_plain(status_icon(cpu < 85)),          rt_code(f"{cpu}%")],
+        [rt_plain("RAM"),          rt_plain(status_icon(not ram_critical)),   rt_code(f"{round(ram_used / ram_total * 100, 1)}%")],
+        [rt_plain("Disk"),         rt_plain(status_icon(not disk_critical)),  rt_code(f"{round(used_disk / total_disk * 100, 1)}%")],
+        [rt_plain("Cache"),        rt_plain("📦"),                            rt_code(fmt_bytes(dl_size))],
+        [rt_plain("Active Rooms"), rt_plain("🎵"),                            rt_code(f"{active_chats} chats")],
+        [rt_plain("Queue"),        rt_plain("📜"),                            rt_code(f"{total_queued} songs")],
     ]
 
-    # ── Rich blocks build ─────────────────────────────────────────────────────
+    # ── Blocks build ───────────────────────────────────────────────────────────
     blocks = [
-        rb_block_quote(f"🏥 RICKTO SERVER DIAGNOSTICS\nStatus: {overall}\nUptime: {uptime_str()}"),
+        rb_block_quote(f"🏥 RICKTO DIAGNOSTICS\nStatus: {overall}\nUptime: {uptime_str()}"),
         rb_divider(),
         rb_heading("🖥️ System Metrics", level=2),
         rb_table(
-            headers=["Component", "Status", "Usage / Info"],
+            headers=["Component", "Status", "Info"],
             rows=rows,
         ),
     ]
 
-    # Overloaded chats → collapsible block
     if overloaded:
         ol_blocks = [
             rb_paragraph(rt_concat(
-                rt_plain(f"• Chat "),
+                rt_plain("• Chat "),
                 rt_code(str(cid)),
                 rt_plain(f"  →  {cnt} songs"),
             ))
             for cid, cnt in overloaded[:5]
         ]
-        blocks.append(rb_details("⚠️ Overloaded Chats (10+)", ol_blocks, is_open=True))
+        blocks.append(rb_details("⚠️ Overloaded Chats", ol_blocks, is_open=True))
 
-    # Critical alerts
     if issues:
         blocks.append(rb_divider())
         blocks.append(rb_heading("📋 Critical Alerts", level=3))
         for issue in issues:
             blocks.append(rb_paragraph(rt_plain(f"❌ {issue}")))
 
-    # ── Delete loading msg → send rich ────────────────────────────────────────
+    # ── Delete loader → send rich ──────────────────────────────────────────────
     try:
         await sent.delete()
     except Exception:
         pass
 
-    await send_rich_message(
-        chat_id=m.chat.id,
-        blocks=blocks,
-    )
+    result = await send_rich_message(chat_id=m.chat.id, blocks=blocks)
+
+    # Agar rich message fail ho (purana client) toh HTML fallback
+    if not result.get("ok"):
+        await m.reply_text(
+            f"<blockquote><b>🏥 RICKTO DIAGNOSTICS</b>\n"
+            f"Status: <b>{overall}</b>\nUptime: <code>{uptime_str()}</code></blockquote>\n\n"
+            + "\n".join(f"❌ <i>{i}</i>" for i in issues) if issues else "✅ All systems normal"
+        )
