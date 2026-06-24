@@ -4,7 +4,7 @@ import shutil
 import asyncio
 import aiohttp
 import psutil
-
+import json
 from pyrogram import filters, types
 from Elevenyts import app, config, db, queue, boot, lang
 
@@ -248,6 +248,10 @@ async def health_check(_, m: types.Message):
         pass
 
     result = await send_rich_message(chat_id=m.chat.id, blocks=blocks)
+
+    # DEBUG
+    
+    await m.reply_text(f"<code>{json.dumps(result, indent=2)[:3000]}</code>")
 
     # Agar rich message fail ho (purana client) toh HTML fallback
     if not result.get("ok"):
