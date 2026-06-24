@@ -6,84 +6,177 @@ import aiohttp
 import psutil
 
 from pyrogram import filters, types, enums
-from Elevenyts import app, config, db, queue, boot
+from Elevenyts import app, config, db, queue, boot, lang
+
 
 def fmt_bytes(b):
     for u in ["B", "KB", "MB", "GB"]:
-        if b < 1024: return f"{b:.1f}{u}"
+        if b < 1024:
+            return f"{b:.1f} {u}"
         b /= 1024
-    return f"{b:.1f}GB"
+    return f"{b:.1f} GB"
 
-async def check_youtube_api() -> tuple[bool, str]:
+
+def status_icon(ok): return "🟢" if ok else "🔴"
+
+
+async def check_youtube_api() -> tuple[bool, str, float]:
     url = getattr(config, "YOUTUBE_API_URL", "").rstrip("/")
-    if not url: return False, "Not Set"
+    if not url:
+        return False, "Not Set", -1
     try:
         start = time.monotonic()
         async with aiohttp.ClientSession() as s:
-            async with s.get(f"{url}/health", timeout=aiohttp.ClientTimeout(total=5)) as r:
-                lat = round((time.monotonic() - start) * 1000, 1)
-                return (True, f"{lat}ms") if r.status == 200 else (False, f"HTTP {r.status}")
-    except: return False, "Offline"
+            async with s.get(
+                f"{url}/health",
+                timeout=aiohttp.ClientTimeout(total=8)
+            ) as r:
+                latency = round((time.monotonic() - start) * 1000, 1)
+                if r.status == 200:
+                    return True, f"Online ({latency}ms)", latency
+                else:
+                    return False, f"HTTP {r.status}", latency
+    except asyncio.TimeoutError:
+        return False, "Timeout", -1
+    except aiohttp.ClientConnectorError:
+        return False, "Unreachable", -1
+    except Exception as e:
+        return False, "Error", -1
 
-@app.on_message(filters.command("health") & filters.user(app.owner))
-async def health_check(client, m: types.Message):
+
+def get_disk_info() -> tuple[float, float, float, float, bool]:
+    total, used, free = shutil.disk_usage("/")
+    downloads_size = 0
+    dl_dir = "downloads"
+    if os.path.exists(dl_dir):
+        try:
+            with os.scandir(dl_dir) as entries:
+                for f in entries:
+                    try:
+                        downloads_size += f.stat().st_size
+                    except:
+                        pass
+        except:
+            pass
+    disk_critical = (used / total) > 0.88
+    return total, used, free, downloads_size, disk_critical
+
+
+def get_ram_info() -> tuple[float, float, bool]:
+    mem = psutil.virtual_memory()
+    ram_critical = mem.percent > 85
+    return mem.used, mem.total, ram_critical
+
+
+def get_queue_health() -> tuple[int, int, list]:
+    total_queued = 0
+    overloaded_chats = []
+    active_chat_ids = list(db.active_calls.keys())
+
+    for chat_id in active_chat_ids:
+        q = queue.get_queue(chat_id)
+        total_queued += len(q)
+        if len(q) > 10:
+            overloaded_chats.append((chat_id, len(q)))
+
+    return total_queued, len(active_chat_ids), overloaded_chats
+
+
+def uptime_str() -> str:
+    secs = int(time.time() - boot)
+    h, m, s = secs // 3600, (secs % 3600) // 60, secs % 60
+    return f"{h}h {m}m {s}s"
+
+
+@app.on_message(
+    filters.command("health") & filters.user(app.owner)
+)
+async def health_check(_, m: types.Message):
     try:
         await m.delete()
     except:
         pass
 
-    # Fetch fresh live statistics
-    api_ok, api_msg = await check_youtube_api()
-    total, used, free = shutil.disk_usage("/")
-    ram = psutil.virtual_memory()
-    cpu = psutil.cpu_percent(interval=0.2)
-    active_chats = len(list(db.active_calls.keys()))
-    
-    total_queued = 0
-    for cid in list(db.active_calls.keys()):
-        total_queued += len(queue.get_queue(cid))
+    sent = await m.reply_text("📊 <i>Generating native table matrix...</i>", parse_mode=enums.ParseMode.HTML)
 
-    # --- BOT API 10.1 OFFICIAL sendRichMessage JSON ENGINE ---
-    # Constructing the exact payload architecture defined in the June 2026 updates.
-    rich_blocks = [
-        {
-            "type": "rich_block_section_heading",
-            "text": "🏥 RICKTO SERVER DIAGNOSTICS\nStatus: 🟢 OPERATIONAL"
-        },
-        {
-            "type": "rich_block_table",
-            "columns": 3,
-            "header_rows": 1,         # Distinct native background header block trigger
-            "rows": [
-                # Row 1: Native Slide Header Definition
-                [{"text": "COMPONENT"}, {"text": "STATUS"}, {"text": "METRIC"}],
-                # Nested Grid Data Items
-                [{"text": "YouTube API"}, {"text": "OK" if api_ok else "ERR"}, {"text": api_msg}],
-                [{"text": "CPU Core"}, {"text": "OK" if cpu < 85 else "HIGH"}, {"text": f"{cpu}%"}],
-                [{"text": "RAM Memory"}, {"text": "OK" if ram.percent < 85 else "HIGH"}, {"text": f"{ram.percent}%"}],
-                [{"text": "Disk Space"}, {"text": "OK" if (used/total) < 0.88 else "CRIT"}, {"text": f"{round(used/total*100, 1)}%"}],
-                [{"text": "Active Rooms"}, {"text": "LIVE"}, {"text": f"{active_chats} Rooms"}],
-                [{"text": "Total Queue"}, {"text": "SYNC"}, {"text": f"{total_queued} Songs"}]
-            ]
-        }
-    ]
+    # --- Checks ---
+    api_ok, api_msg, api_latency = await check_youtube_api()
+    total_disk, used_disk, free_disk, dl_size, disk_critical = get_disk_info()
+    ram_used, ram_total, ram_critical = get_ram_info()
+    cpu = psutil.cpu_percent(interval=0.5)
+    total_queued, active_chats, overloaded = get_queue_health()
 
-    try:
-        # Bypassing parser constraints via raw method invocation mapping
-        await client.invoke(
-            raw.functions.messages.SendRichMessage(
-                peer=await client.resolve_peer(m.chat.id),
-                rich_blocks=rich_blocks,
-                random_id=client.rnd_id()
-            )
-        )
-    except Exception:
-        # Strict fallback in case your current Local Bot API instance isn't patched to v10.1 yet
-        fallback_text = (
-            f"🏥 <b>RICKTO DIAGNOSTICS Fallback</b>\n\n"
-            f"• API: <code>{api_msg}</code>\n"
-            f"• CPU: <code>{cpu}%</code>\n"
-            f"• RAM: <code>{ram.percent}%</code>\n"
-            f"• Disk: <code>{round(used/total*100, 1)}%</code>"
-        )
-        await m.reply_text(fallback_text, parse_mode=enums.ParseMode.HTML)
+    issues = []
+    if not api_ok: issues.append("YouTube API Down")
+    if disk_critical: issues.append("Disk space critical")
+    if ram_critical: issues.append("RAM overload")
+    if overloaded: issues.append(f"{len(overloaded)} chats overloaded")
+    if cpu > 85: issues.append(f"CPU Spike ({cpu}%)")
+
+    overall_status = "🟢 OPERATIONAL" if not issues else "🔴 ISSUES DETECTED"
+
+    # --- NATIVE TELEGRAM TABLE (HTML Format) ---
+    report = f"""<blockquote><b>🏥 RICKTO SERVER DIAGNOSTICS</b>
+Status: <b>{overall_status}</b>
+Uptime: <code>{uptime_str()}</code></blockquote>
+
+<b>🖥️ SYSTEM METRICS TABLE:</b>
+<table>
+<tr>
+  <th>Component</th>
+  <th>Status</th>
+  <th>Usage / Info</th>
+</tr>
+<tr>
+  <td><b>YouTube API</b></td>
+  <td>{status_icon(api_ok)}</td>
+  <td><code>{api_msg}</code></td>
+</tr>
+<tr>
+  <td><b>CPU Core</b></td>
+  <td>{status_icon(cpu < 85)}</td>
+  <td><code>{cpu}%</code></td>
+</tr>
+<tr>
+  <td><b>RAM (Memory)</b></td>
+  <td>{status_icon(not ram_critical)}</td>
+  <td><code>{round(ram_used/ram_total*100, 1)}%</code></td>
+</tr>
+<tr>
+  <td><b>Disk (Storage)</b></td>
+  <td>{status_icon(not disk_critical)}</td>
+  <td><code>{round(used_disk/total_disk*100, 1)}%</code></td>
+</tr>
+<tr>
+  <td><b>Cache Size</b></td>
+  <td>📦</td>
+  <td><code>{fmt_bytes(dl_size)}</code></td>
+</tr>
+<tr>
+  <td><b>Active Rooms</b></td>
+  <td>🎵</td>
+  <td><code>{active_chats} chats</code></td>
+</tr>
+<tr>
+  <td><b>Total Queue</b></td>
+  <td>📜</td>
+  <td><code>{total_queued} songs</code></td>
+</tr>
+</table>
+
+<b>🌐 API Endpoint Hidden:</b> <spoiler>{getattr(config, 'YOUTUBE_API_URL', 'Not Set')}</spoiler>"""
+
+    # Overloaded chats ke liye expandable dropdown block
+    if overloaded:
+        report += "\n\n<blockquote expandable><b>⚠️ OVERLOADED CHATS (10+)</b>"
+        for cid, cnt in overloaded[:5]:
+            report += f"\n• <code>{cid}</code> ➜ <b>{cnt} songs</b>"
+        report += "</blockquote>"
+
+    # System logs listing
+    if issues:
+        report += "\n\n📋 <b>CRITICAL ALERTS:</b>"
+        for issue in issues:
+            report += f"\n❌ <i>{issue}</i>"
+
+    await sent.edit_text(report, parse_mode=enums.ParseMode.HTML)
