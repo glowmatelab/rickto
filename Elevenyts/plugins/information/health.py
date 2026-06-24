@@ -97,9 +97,9 @@ async def health_check(_, m: types.Message):
     except:
         pass
 
-    sent = await m.reply_text("📊 <i>Rendering rigid text matrix...</i>", parse_mode=enums.ParseMode.HTML)
+    sent = await m.reply_text("📊 <i>Generating clean system dashboard...</i>", parse_mode=enums.ParseMode.HTML)
 
-    # --- Diagnostics Data ---
+    # --- Data Fetch ---
     api_ok, api_msg, api_latency = await check_youtube_api()
     total_disk, used_disk, free_disk, dl_size, disk_critical = get_disk_info()
     ram_used, ram_total, ram_critical = get_ram_info()
@@ -115,40 +115,38 @@ async def health_check(_, m: types.Message):
 
     overall_status = "🟢 OPERATIONAL" if not issues else "🔴 ALERT ISSUES"
 
-    # --- Strict Document Layout (Responsive Grid Builder) ---
-    # Har column ki length fixed kari hai taaki grid mobile screen par break na ho.
-    comp_w, stat_w, info_w = 12, 6, 12
+    # --- Clean Space-Padded Matrix (No Break Layout) ---
+    c1, c2, c3 = 13, 6, 12
     
-    def r_row(c, s, i):
-        return f"│{c:<{comp_w}}│{s:^{stat_w}}│{i:<{info_w}}│\n"
+    def row(col1, col2, col3):
+        return f"│ {col1:<{c1}} │ {col2:^{c2}} │ {col3:<{c3}} │\n"
 
-    grid_table = "┌" + "─"*comp_w + "┬" + "─"*stat_w + "┬" + "─"*info_w + "┐\n"
-    grid_table += r_row("Component", "Status", "Usage/Info")
-    grid_table += "├" + "─"*comp_w + "┼" + "─"*stat_w + "┼" + "─"*info_w + "┤\n"
-    
-    grid_table += r_row("YouTube API", status_str(api_ok), api_msg)
-    grid_table += r_row("CPU Core", status_str(cpu < 85), f"{cpu}%")
-    grid_table += r_row("RAM Memory", status_str(not ram_critical), f"{round(ram_used/ram_total*100, 1)}%")
-    grid_table += r_row("Disk Storage", status_str(not disk_critical), f"{round(used_disk/total_disk*100, 1)}%")
-    grid_table += r_row("Cache Size", "OK", fmt_bytes(dl_size))
-    grid_table += r_row("Active Rooms", "OK", f"{active_chats} Chats")
-    grid_table += r_row("Total Queue", "OK", f"{total_queued} Songs")
-    grid_table += "└" + "─"*comp_w + "┴" + "─"*stat_w + "┴" + "─"*info_w + "┘"
+    grid = "┌" + "─"*(c1+2) + "┬" + "─"*(c2+2) + "┬" + "─"*(c3+2) + "┐\n"
+    grid += row("COMPONENT", "STATUS", "INFO")
+    grid += "├" + "─"*(c1+2) + "┼" + "─"*(c2+2) + "┼" + "─"*(c3+2) + "┤\n"
+    grid += row("YouTube API", status_str(api_ok), api_msg)
+    grid += row("CPU Core", status_str(cpu < 85), f"{cpu}%")
+    grid += row("RAM Memory", status_str(not ram_critical), f"{round(ram_used/ram_total*100, 1)}%")
+    grid += row("Disk Storage", status_str(not disk_critical), f"{round(used_disk/total_disk*100, 1)}%")
+    grid += row("Cache Folder", "OK", fmt_bytes(dl_size))
+    grid += row("Active Rooms", "OK", f"{active_chats}")
+    grid += row("Total Queue", "OK", f"{total_queued}")
+    grid += "└" + "─"*(c1+2) + "┴" + "─"*(c2+2) + "┴" + "─"*(c3+2) + "┘"
 
-    # --- Report Build ---
+    # --- Final Construction ---
     report = f"""<blockquote><b>🏥 RICKTO SERVER DIAGNOSTICS</b>
 Status: <b>{overall_status}</b>
 Uptime: <code>{uptime_str()}</code></blockquote>
 
 <b>🖥️ SYSTEM MATRIX DATA:</b>
-<pre>{grid_table}</pre>
+<pre>{grid}</pre>
 
-<b>🌐 Hidden Endpoint:</b> <spoiler>{getattr(config, 'YOUTUBE_API_URL', 'Not Set')}</spoiler>"""
+<b>🌐 API Endpoint:</b> <spoiler>{getattr(config, 'YOUTUBE_API_URL', 'Not Set')}</spoiler>"""
 
     if overloaded:
         report += "\n\n<blockquote expandable><b>⚠️ OVERLOADED CHATS (10+)</b>"
         for cid, cnt in overloaded[:5]:
-            report += f"\n• <code>{cid}</code> ➜ <b>{cnt} songs</b>"
+            report += f"\n• <code>{cid}</code> ➜ <b>{cnt} tracks</b>"
         report += "</blockquote>"
 
     if issues:
