@@ -12,12 +12,12 @@ from Elevenyts import app, config, db, queue, boot, lang
 def fmt_bytes(b):
     for u in ["B", "KB", "MB", "GB"]:
         if b < 1024:
-            return f"{b:.1f} {u}"
+            return f"{b:.1f}{u}"
         b /= 1024
-    return f"{b:.1f} GB"
+    return f"{b:.1f}GB"
 
 
-def status_icon(ok): return "🟢" if ok else "🔴"
+def status_str(ok): return "OK" if ok else "ERR"
 
 
 async def check_youtube_api() -> tuple[bool, str, float]:
@@ -33,13 +33,13 @@ async def check_youtube_api() -> tuple[bool, str, float]:
             ) as r:
                 latency = round((time.monotonic() - start) * 1000, 1)
                 if r.status == 200:
-                    return True, f"Online ({latency}ms)", latency
+                    return True, f"{latency}ms", latency
                 else:
-                    return False, f"HTTP {r.status}", latency
+                    return False, f"H-{r.status}", latency
     except asyncio.TimeoutError:
         return False, "Timeout", -1
     except aiohttp.ClientConnectorError:
-        return False, "Unreachable", -1
+        return False, "Unreach", -1
     except Exception as e:
         return False, "Error", -1
 
@@ -97,9 +97,9 @@ async def health_check(_, m: types.Message):
     except:
         pass
 
-    sent = await m.reply_text("📊 <i>Generating native table matrix...</i>", parse_mode=enums.ParseMode.HTML)
+    sent = await m.reply_text("📊 <i>Rendering rigid text matrix...</i>", parse_mode=enums.ParseMode.HTML)
 
-    # --- Checks ---
+    # --- Diagnostics Data ---
     api_ok, api_msg, api_latency = await check_youtube_api()
     total_disk, used_disk, free_disk, dl_size, disk_critical = get_disk_info()
     ram_used, ram_total, ram_critical = get_ram_info()
@@ -113,67 +113,44 @@ async def health_check(_, m: types.Message):
     if overloaded: issues.append(f"{len(overloaded)} chats overloaded")
     if cpu > 85: issues.append(f"CPU Spike ({cpu}%)")
 
-    overall_status = "🟢 OPERATIONAL" if not issues else "🔴 ISSUES DETECTED"
+    overall_status = "🟢 OPERATIONAL" if not issues else "🔴 ALERT ISSUES"
 
-    # --- NATIVE TELEGRAM TABLE (HTML Format) ---
+    # --- Strict Document Layout (Responsive Grid Builder) ---
+    # Har column ki length fixed kari hai taaki grid mobile screen par break na ho.
+    comp_w, stat_w, info_w = 12, 6, 12
+    
+    def r_row(c, s, i):
+        return f"│{c:<{comp_w}}│{s:^{stat_w}}│{i:<{info_w}}│\n"
+
+    grid_table = "┌" + "─"*comp_w + "┬" + "─"*stat_w + "┬" + "─"*info_w + "┐\n"
+    grid_table += r_row("Component", "Status", "Usage/Info")
+    grid_table += "├" + "─"*comp_w + "┼" + "─"*stat_w + "┼" + "─"*info_w + "┤\n"
+    
+    grid_table += r_row("YouTube API", status_str(api_ok), api_msg)
+    grid_table += r_row("CPU Core", status_str(cpu < 85), f"{cpu}%")
+    grid_table += r_row("RAM Memory", status_str(not ram_critical), f"{round(ram_used/ram_total*100, 1)}%")
+    grid_table += r_row("Disk Storage", status_str(not disk_critical), f"{round(used_disk/total_disk*100, 1)}%")
+    grid_table += r_row("Cache Size", "OK", fmt_bytes(dl_size))
+    grid_table += r_row("Active Rooms", "OK", f"{active_chats} Chats")
+    grid_table += r_row("Total Queue", "OK", f"{total_queued} Songs")
+    grid_table += "└" + "─"*comp_w + "┴" + "─"*stat_w + "┴" + "─"*info_w + "┘"
+
+    # --- Report Build ---
     report = f"""<blockquote><b>🏥 RICKTO SERVER DIAGNOSTICS</b>
 Status: <b>{overall_status}</b>
 Uptime: <code>{uptime_str()}</code></blockquote>
 
-<b>🖥️ SYSTEM METRICS TABLE:</b>
-<table>
-<tr>
-  <th>Component</th>
-  <th>Status</th>
-  <th>Usage / Info</th>
-</tr>
-<tr>
-  <td><b>YouTube API</b></td>
-  <td>{status_icon(api_ok)}</td>
-  <td><code>{api_msg}</code></td>
-</tr>
-<tr>
-  <td><b>CPU Core</b></td>
-  <td>{status_icon(cpu < 85)}</td>
-  <td><code>{cpu}%</code></td>
-</tr>
-<tr>
-  <td><b>RAM (Memory)</b></td>
-  <td>{status_icon(not ram_critical)}</td>
-  <td><code>{round(ram_used/ram_total*100, 1)}%</code></td>
-</tr>
-<tr>
-  <td><b>Disk (Storage)</b></td>
-  <td>{status_icon(not disk_critical)}</td>
-  <td><code>{round(used_disk/total_disk*100, 1)}%</code></td>
-</tr>
-<tr>
-  <td><b>Cache Size</b></td>
-  <td>📦</td>
-  <td><code>{fmt_bytes(dl_size)}</code></td>
-</tr>
-<tr>
-  <td><b>Active Rooms</b></td>
-  <td>🎵</td>
-  <td><code>{active_chats} chats</code></td>
-</tr>
-<tr>
-  <td><b>Total Queue</b></td>
-  <td>📜</td>
-  <td><code>{total_queued} songs</code></td>
-</tr>
-</table>
+<b>🖥️ SYSTEM MATRIX DATA:</b>
+<pre>{grid_table}</pre>
 
-<b>🌐 API Endpoint Hidden:</b> <spoiler>{getattr(config, 'YOUTUBE_API_URL', 'Not Set')}</spoiler>"""
+<b>🌐 Hidden Endpoint:</b> <spoiler>{getattr(config, 'YOUTUBE_API_URL', 'Not Set')}</spoiler>"""
 
-    # Overloaded chats ke liye expandable dropdown block
     if overloaded:
         report += "\n\n<blockquote expandable><b>⚠️ OVERLOADED CHATS (10+)</b>"
         for cid, cnt in overloaded[:5]:
             report += f"\n• <code>{cid}</code> ➜ <b>{cnt} songs</b>"
         report += "</blockquote>"
 
-    # System logs listing
     if issues:
         report += "\n\n📋 <b>CRITICAL ALERTS:</b>"
         for issue in issues:
