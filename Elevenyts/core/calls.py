@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import random 
-from Elevenyts.storage import AUTO_PLAY, PLAYED_IDS  # ← PLAYED_IDS add karo
+from Elevenyts.storage import AUTO_PLAY, PLAYED_IDS
 from ntgcalls import ConnectionNotFound, TelegramServerError
 from pyrogram import enums, errors
 from pyrogram.errors import MessageIdInvalid
@@ -12,15 +12,11 @@ from pytgcalls.pytgcalls_session import PyTgCallsSession
 from Elevenyts import app, config, db, lang, logger, preload, queue, userbot, yt
 from Elevenyts.helpers import Media, Track, buttons, thumb
 
-# Suppress pytgcalls harmless errors (library bugs - not critical)
-
 
 class PyTgCallsErrorFilter(logging.Filter):
     def filter(self, record):
-        # Filter out UpdateGroupCall errors
         if 'UpdateGroupCall' in record.getMessage():
             return False
-        # Filter out ConnectionNotFound errors (happens when call ends but updates still arrive)
         if 'Connection with chat id' in record.getMessage() and 'not found' in record.getMessage():
             return False
         return True
@@ -32,11 +28,10 @@ logging.getLogger('pyrogram.dispatcher').addFilter(PyTgCallsErrorFilter())
 class TgCall(PyTgCalls):
     def __init__(self):
         self.clients = []
-        self._play_next_locks = {}  # Lock to prevent concurrent play_next calls per chat
-        self._stream_end_cache = {}  # Cache to prevent duplicate stream end processing
+        self._play_next_locks = {}
+        self._stream_end_cache = {}
 
     async def _edit_media_with_retry(self, message: Message, media_obj: InputMediaPhoto, reply_markup):
-        """Edit media with basic FloodWait handling."""
         try:
             return await message.edit_media(media=media_obj, reply_markup=reply_markup)
         except errors.FloodWait as fw:
@@ -51,7 +46,6 @@ class TgCall(PyTgCalls):
             return None
 
     async def _send_photo_with_retry(self, chat_id: int, photo, caption: str, reply_markup):
-        """Send photo with FloodWait handling."""
         try:
             return await app.send_photo(
                 chat_id=chat_id,
@@ -87,8 +81,7 @@ class TgCall(PyTgCalls):
             await db.playing(chat_id, paused=False)
             await db.remove_call(chat_id)
             queue.clear(chat_id)
-            logger.warning(
-                f"Pause requested but assistant not in call for {chat_id}, syncing state")
+            logger.warning(f"Pause requested but assistant not in call for {chat_id}, syncing state")
             return False
         except Exception as e:
             await db.playing(chat_id, paused=False)
@@ -105,8 +98,7 @@ class TgCall(PyTgCalls):
             await db.playing(chat_id, paused=False)
             await db.remove_call(chat_id)
             queue.clear(chat_id)
-            logger.warning(
-                f"Resume requested but assistant not in call for {chat_id}, syncing state")
+            logger.warning(f"Resume requested but assistant not in call for {chat_id}, syncing state")
             return False
         except Exception as e:
             logger.error(f"Resume failed for {chat_id}: {e}")
@@ -115,7 +107,6 @@ class TgCall(PyTgCalls):
     async def stop(self, chat_id: int) -> None:
         client = await db.get_assistant(chat_id)
 
-        # Cancel any active preload tasks when stopping
         try:
             await preload.cancel_preload(chat_id)
         except Exception as e:
@@ -129,13 +120,10 @@ class TgCall(PyTgCalls):
 
         try:
             await client.leave_call(chat_id, close=False)
-            # Small delay to let group call state stabilize after leaving
             await asyncio.sleep(0.5)
         except (ConnectionNotFound, exceptions.NotInCallError):
-            # Expected: userbot is not in a call
             pass
         except Exception as e:
-            # Only log unexpected errors
             error_msg = str(e).lower()
             if not any(ignore in error_msg for ignore in [
                 "not in a call",
@@ -155,25 +143,11 @@ class TgCall(PyTgCalls):
         seek_time: int = 0,
         message_chat_id: int = None,
     ) -> None:
-        """Play media in voice chat.
-
-        Args:
-            chat_id: Where to stream audio (could be channel in channel play mode)
-            message: Message to edit/delete (if any)
-            media: Media object to play
-            seek_time: Position to seek to (seconds)
-            message_chat_id: Where to send control messages (group chat in channel play mode)
-                           If None, messages go to same chat as audio (chat_id)
-        """
         client = await db.get_assistant(chat_id)
         _lang = await lang.get_lang(chat_id)
 
-        # Determine where messages should go:
-        # - If message_chat_id provided (channel play): send to group
-        # - Otherwise: send to same chat as audio
         target_chat_for_messages = message_chat_id if message_chat_id else chat_id
 
-        # Generate thumbnail only if THUMB_GEN is enabled, otherwise use default
         if config.THUMB_GEN and isinstance(media, Track):
             _thumb = await thumb.generate(media)
         else:
@@ -186,7 +160,6 @@ class TgCall(PyTgCalls):
                 logger.error(f"No file path for media in {chat_id}")
                 return
 
-        # Validate chat_id - check if it's a valid channel/group
         try:
             chat = await app.get_chat(chat_id)
             if chat.type not in [enums.ChatType.SUPERGROUP, enums.ChatType.GROUP, enums.ChatType.CHANNEL]:
@@ -194,9 +167,7 @@ class TgCall(PyTgCalls):
                 if message:
                     await message.edit_text("❌ ᴄᴀɴ ᴏɴʟʏ ᴘʟᴀʏ ɪɴ ɢʀᴏᴜᴘꜱ/ᴄʜᴀɴɴᴇʟꜱ.")
                 return
-            # For channels, verify assistant is member
             if chat.type == enums.ChatType.CHANNEL:
-                # Get the userbot (Pyrogram client) to access .me attribute
                 userbot_client = await db.get_client(chat_id)
                 if not userbot_client:
                     logger.error(f"No userbot client available for {chat_id}")
@@ -210,19 +181,16 @@ class TgCall(PyTgCalls):
                         logger.error(f"Assistant banned in channel {chat_id}")
                         if message:
                             await message.edit_text("❌ ᴀꜱꜱɪꜱᴛᴀɴᴛ ɪꜱ ʙᴀɴɴᴇᴅ ɪɴ ᴛʜɪꜱ ᴄʜᴀɴɴᴇʟ.")
-                        # Disable channel play
                         await db.set_cmode(chat_id, None)
                         return
                 except errors.RPCError as e:
                     if "CHANNEL_INVALID" in str(e) or "USER_NOT_PARTICIPANT" in str(e):
-                        logger.error(
-                            f"Assistant not in channel {chat_id}: {e}")
+                        logger.error(f"Assistant not in channel {chat_id}: {e}")
                         if message:
                             await message.edit_text(
                                 "❌ <b>ᴀꜱꜱɪꜱᴛᴀɴᴛ ɴᴏᴛ ɪɴ ᴄʜᴀɴɴᴇʟ!</b>\n\n"
                                 f"<blockquote>ᴘʟᴇᴀꜱᴇ ᴀᴅᴅ @{userbot_client.me.username} ᴛᴏ ᴛʜᴇ ᴄʜᴀɴɴᴇʟ ᴀꜱ ᴀᴅᴍɪɴ ᴡɪᴛʜ ᴠᴏɪᴄᴇ ᴄʜᴀᴛ ᴘᴇʀᴍɪꜱꜱɪᴏɴꜱ.</blockquote>"
                             )
-                        # Disable channel play
                         await db.set_cmode(chat_id, None)
                         return
         except errors.RPCError as e:
@@ -230,22 +198,13 @@ class TgCall(PyTgCalls):
                 logger.error(f"Invalid channel {chat_id}: {e}")
                 if message:
                     await message.edit_text("❌ ɪɴᴠᴀʟɪᴅ ᴄʜᴀɴɴᴇʟ. ᴅɪꜱᴀʙʟɪɴɢ ᴄʜᴀɴɴᴇʟ ᴘʟᴀʏ.")
-                await db.set_cmode(chat_id, None)  # Disable channel play
+                await db.set_cmode(chat_id, None)
                 return
             raise
 
-        # Configure audio stream with optimized buffering for lag-free playback
-        # PERFORMANCE FIX: Increased buffers prevent stuttering/lagging during playback
         if seek_time > 1:
-            # Seeking: Still need buffers but skip to position first
             ffmpeg_params = f"-ss {seek_time} -probesize 10M -analyzeduration 5M -rtbufsize 5M -fflags +genpts+igndts"
         else:
-            # Normal playback with aggressive buffering:
-            # - probesize 10M: Large input buffer (prevents underruns)
-            # - analyzeduration 5M: Analyze more data (better format detection)
-            # - rtbufsize 5M: Real-time buffer (crucial for network streams)
-            # - fflags +genpts+igndts: Generate PTS, ignore DTS (smooth playback)
-            # - sync ext: External sync (reduces A/V desync)
             ffmpeg_params = "-probesize 10M -analyzeduration 5M -rtbufsize 5M -fflags +genpts+igndts -sync ext"
 
         is_video = getattr(media, "video", False)
@@ -266,8 +225,7 @@ class TgCall(PyTgCalls):
         try:
             call = await client.get_call(chat_id)
             if call:
-                logger.debug(
-                    f"Already connected to {chat_id}, leaving before reconnecting...")
+                logger.debug(f"Already connected to {chat_id}, leaving before reconnecting...")
                 await client.leave_call(chat_id, close=False)
         except (ConnectionNotFound, exceptions.NotInCallError):
             pass
@@ -290,8 +248,7 @@ class TgCall(PyTgCalls):
                     error_msg = str(e)
                     if "GROUPCALL_INVALID" in error_msg or "GROUPCALL" in error_msg or isinstance(e, exceptions.NoActiveGroupCall):
                         if attempt < max_retries - 1:
-                            logger.debug(
-                                f"Group call transitioning for {chat_id}, retrying in {retry_delay}s... (attempt {attempt + 1}/{max_retries})")
+                            logger.debug(f"Group call transitioning for {chat_id}, retrying in {retry_delay}s... (attempt {attempt + 1}/{max_retries})")
                             await asyncio.sleep(retry_delay)
                             continue
                         else:
@@ -302,8 +259,7 @@ class TgCall(PyTgCalls):
                     error_msg = str(e).lower()
                     if "cannot be initialized more than once" in error_msg or "connection" in error_msg:
                         if attempt < max_retries - 1:
-                            logger.debug(
-                                f"Connection error for {chat_id}, leaving and retrying... (attempt {attempt + 1}/{max_retries})")
+                            logger.debug(f"Connection error for {chat_id}, leaving and retrying... (attempt {attempt + 1}/{max_retries})")
                             try:
                                 await client.leave_call(chat_id, close=False)
                                 await asyncio.sleep(retry_delay)
@@ -339,17 +295,13 @@ class TgCall(PyTgCalls):
                         percentage = min((played / duration) * 100, 100)
                     filled = int(round(bar_length * percentage / 100))
                     remaining = bar_length - filled - 1
-                    timer_bar = "▰" * filled + "⨷" + "▱" * max(remaining, 0) #timer_bar = "▰" * filled + "▰" + "▱" * (bar_length - filled)
+                    timer_bar = "▰" * filled + "⨷" + "▱" * max(remaining, 0)
                     if duration >= 3600:
-                        played_time = time_module.strftime(
-                            '%H:%M:%S', time_module.gmtime(played))
-                        total_time = time_module.strftime(
-                            '%H:%M:%S', time_module.gmtime(duration))
+                        played_time = time_module.strftime('%H:%M:%S', time_module.gmtime(played))
+                        total_time = time_module.strftime('%H:%M:%S', time_module.gmtime(duration))
                     else:
-                        played_time = time_module.strftime(
-                            '%M:%S', time_module.gmtime(played))
-                        total_time = time_module.strftime(
-                            '%M:%S', time_module.gmtime(duration))
+                        played_time = time_module.strftime('%M:%S', time_module.gmtime(played))
+                        total_time = time_module.strftime('%M:%S', time_module.gmtime(duration))
                     timer_text = f"{played_time} {timer_bar} {total_time}"
                     keyboard = buttons.controls(chat_id, timer=timer_text)
                 else:
@@ -362,7 +314,6 @@ class TgCall(PyTgCalls):
                         pass
 
                 if getattr(media, "is_autoplay", False):
-
                     sent_msg = await app.send_message(
                         chat_id=target_chat_for_messages,
                         text=(
@@ -370,16 +321,12 @@ class TgCall(PyTgCalls):
                             f"<blockquote><b>🎵 ɴᴏᴡ ᴘʟᴀʏɪɴɢ: - </b>{media.title}\n"
                             "<b>✨ sᴜɢɢᴇsᴛᴇᴅ ʙʏ ᴀɪ sʏsᴛᴇᴍ</b></blockquote>\n"
                             "<blockquote><spoiler>✨This Feature is Made by <a href='https://t.me/galaxy_bots_update'>Manish</a> ⚡</spoiler></blockquote>"
-                            )
+                        )
                     )
-
                     if sent_msg:
                         media.message_id = sent_msg.id
-
                 else:
-
                     play_msg_enabled = await db.get_playmessage(target_chat_for_messages)
-                
                     if play_msg_enabled:
                         sent_photo = await self._send_photo_with_retry(
                             chat_id=target_chat_for_messages,
@@ -387,23 +334,21 @@ class TgCall(PyTgCalls):
                             caption=text,
                             reply_markup=keyboard,
                         )
-                
                         if sent_photo:
                             media.message_id = sent_photo.id
-                # 👇 YE 6 LINES ADD KARO
+
                 try:
                     from Elevenyts.plugins.settings.partymode import PARTY_STICKERS, party_chats
                     if chat_id in party_chats:
                         asyncio.create_task(app.send_sticker(target_chat_for_messages, random.choice(PARTY_STICKERS)))
                 except Exception:
                     pass
-                # 👆 BAS ITNA
 
                 try:
-                    asyncio.create_task(
-                        preload.start_preload(chat_id, count=2))
+                    asyncio.create_task(preload.start_preload(chat_id, count=2))
                 except Exception as e:
                     logger.debug(f"Error starting preload for {chat_id}: {e}")
+
         except FileNotFoundError:
             if message:
                 try:
@@ -420,7 +365,6 @@ class TgCall(PyTgCalls):
                     pass
         except errors.RPCError as e:
             error_str = str(e)
-
             if any(x in error_str for x in ["CHAT_ADMIN_REQUIRED", "phone.CreateGroupCall", "GROUPCALL_FORBIDDEN", "GROUPCALL_CREATE_FORBIDDEN", "VOICE_MESSAGES_FORBIDDEN"]):
                 await self.stop(chat_id)
                 if message:
@@ -454,8 +398,7 @@ class TgCall(PyTgCalls):
                     pass
         except TimeoutError as e:
             error_msg = str(e)
-            logger.warning(
-                f"⏱️ Timeout joining voice chat {chat_id}: {error_msg}")
+            logger.warning(f"⏱️ Timeout joining voice chat {chat_id}: {error_msg}")
             await self.stop(chat_id)
             if message:
                 try:
@@ -468,8 +411,7 @@ class TgCall(PyTgCalls):
             await asyncio.sleep(2)
             await self.play_next(chat_id)
         except Exception as e:
-            logger.error(
-                f"Unexpected error in play_media for {chat_id}: {e}", exc_info=True)
+            logger.error(f"Unexpected error in play_media for {chat_id}: {e}", exc_info=True)
             await self.stop(chat_id)
             if message:
                 try:
@@ -501,7 +443,6 @@ class TgCall(PyTgCalls):
             logger.error(f"Error in replay for {chat_id}: {e}", exc_info=True)
 
     async def seek_stream(self, chat_id: int, seconds: int) -> bool:
-        """Seek to a specific position in the current stream."""
         try:
             if not await db.get_call(chat_id):
                 return False
@@ -524,7 +465,6 @@ class TgCall(PyTgCalls):
                 pass
 
             media.time = seconds
-
             target_chat = message_chat_id if message_chat_id else chat_id
 
             try:
@@ -549,13 +489,11 @@ class TgCall(PyTgCalls):
         lock = self._play_next_locks[chat_id]
 
         if lock.locked():
-            logger.info(
-                f"play_next already running for {chat_id}, skipping duplicate call")
+            logger.info(f"play_next already running for {chat_id}, skipping duplicate call")
             return
 
         async with lock:
             try:
-
                 message_chat_id = None
                 try:
                     chat = await app.get_chat(chat_id)
@@ -567,7 +505,6 @@ class TgCall(PyTgCalls):
                     pass
 
                 target_chat = message_chat_id if message_chat_id else chat_id
-
                 loop_mode = await db.get_loop(chat_id)
 
                 if loop_mode == 1:
@@ -578,13 +515,11 @@ class TgCall(PyTgCalls):
                             msg = await app.send_message(chat_id=target_chat, text=_lang["play_again"])
                             await self.play_media(chat_id, msg, media, message_chat_id=message_chat_id)
                         except errors.ChannelPrivate:
-                            logger.warning(
-                                f"Bot removed from {chat_id}, cleaning up")
+                            logger.warning(f"Bot removed from {chat_id}, cleaning up")
                             try:
                                 await self.leave_call(chat_id)
                             except (AttributeError, Exception) as leave_ex:
-                                logger.debug(
-                                    f"Could not leave call for {chat_id}: {leave_ex}")
+                                logger.debug(f"Could not leave call for {chat_id}: {leave_ex}")
                             await db.rm_chat(chat_id)
                         return
 
@@ -598,8 +533,7 @@ class TgCall(PyTgCalls):
                         try:
                             msg = await app.send_message(chat_id=target_chat, text="🔁 Looping queue...")
                             if not first_track.file_path:
-                                is_live = getattr(
-                                    first_track, 'is_live', False)
+                                is_live = getattr(first_track, 'is_live', False)
                                 first_track.file_path = await yt.download(
                                     first_track.id,
                                     is_live=is_live,
@@ -608,8 +542,7 @@ class TgCall(PyTgCalls):
                             first_track.message_id = msg.id
                             await self.play_media(chat_id, msg, first_track, message_chat_id=message_chat_id)
                         except errors.ChannelPrivate:
-                            logger.warning(
-                                f"Bot removed from {chat_id}, cleaning up")
+                            logger.warning(f"Bot removed from {chat_id}, cleaning up")
                             await self.leave_call(chat_id)
                             await db.rm_chat(chat_id)
                         return
@@ -623,11 +556,9 @@ class TgCall(PyTgCalls):
                         )
                         media.message_id = 0
                 except Exception as e:
-                    logger.debug(
-                        f"Could not delete previous message in {chat_id}: {e}")
+                    logger.debug(f"Could not delete previous message in {chat_id}: {e}")
 
                 if not media:
-
                     query = AUTO_PLAY.get(chat_id)
 
                     if query:
@@ -639,13 +570,12 @@ class TgCall(PyTgCalls):
                                     f"<blockquote><b>✨ ʙᴀsᴇᴅ ᴏɴ:</b>\n `{query}`\n"
                                     "<i>ᴘʟᴇᴀsᴇ ᴡᴀɪᴛ, ᴛʜᴇ ᴘᴀʀᴛʏ ɴᴇᴠᴇʀ sᴛᴏᴘs! ⚡</i>"
                                     "</blockquote>"
-                                    )
+                                )
                             )
 
                             if chat_id not in PLAYED_IDS:
                                 PLAYED_IDS[chat_id] = set()
-                            
-                            # Saare candidates pehle collect karo
+
                             candidates = []
                             for _ in range(10):
                                 related_queries = [
@@ -663,21 +593,20 @@ class TgCall(PyTgCalls):
                                 if len(candidates) >= 5:
                                     break
 
-                            # Ek ek karke try karo jab tak download na ho
                             next_track = None
                             for candidate in candidates:
                                 PLAYED_IDS[chat_id].add(candidate.id)
                                 if len(PLAYED_IDS[chat_id]) > 50:
                                     PLAYED_IDS[chat_id] = set(list(PLAYED_IDS[chat_id])[-25:])
-                                
+
                                 candidate.is_autoplay = True
                                 logger.info(f"🎵 Autoplay trying: {candidate.title} [{candidate.id}]")
-                                
+
                                 candidate.file_path = await yt.download(
                                     candidate.id,
                                     is_live=candidate.is_live
                                 )
-                                
+
                                 if candidate.file_path:
                                     next_track = candidate
                                     break
@@ -685,7 +614,6 @@ class TgCall(PyTgCalls):
                                     logger.warning(f"⚠️ Autoplay download failed for {candidate.id}, trying next...")
 
                             if next_track and next_track.file_path:
-                                # FIX: Pehle queue clear karo, phir naya track add karo
                                 queue.clear(chat_id)
                                 queue.add(chat_id, next_track)
 
@@ -699,7 +627,6 @@ class TgCall(PyTgCalls):
                                 except Exception as e:
                                     logger.error(f"❌ Autoplay play_media failed: {e}", exc_info=True)
 
-                                # Background mein next autoplay song preload karo
                                 async def preload_next_autoplay(cid, q, played):
                                     try:
                                         preload_queries = [
@@ -726,9 +653,7 @@ class TgCall(PyTgCalls):
                                 asyncio.create_task(
                                     preload_next_autoplay(chat_id, query, PLAYED_IDS.get(chat_id, set()))
                                 )
-
                                 return
-
 
                         except Exception as e:
                             logger.error(f"Autoplay Error: {e}")
@@ -738,15 +663,10 @@ class TgCall(PyTgCalls):
                         try:
                             await app.send_message(
                                 chat_id=chat_id,
-                                text=_lang.get(
-                                    "auto_end",
-                                    "✅ Queue finished. Stream ended automatically."
-                                )
+                                text=_lang.get("auto_end", "✅ Queue finished. Stream ended automatically.")
                             )
                         except Exception as e:
-                            logger.debug(
-                                f"Could not send auto_end message in {chat_id}: {e}"
-                            )
+                            logger.debug(f"Could not send auto_end message in {chat_id}: {e}")
 
                     return await self.stop(chat_id)
 
@@ -754,21 +674,17 @@ class TgCall(PyTgCalls):
                 try:
                     msg = await app.send_message(chat_id=target_chat, text=_lang["play_next"])
                 except errors.FloodWait as fw:
-                    logger.warning(
-                        f"FloodWait in play_next for {chat_id}: waiting {fw.value}s")
+                    logger.warning(f"FloodWait in play_next for {chat_id}: waiting {fw.value}s")
                     await asyncio.sleep(fw.value + 1)
                     try:
                         msg = await app.send_message(chat_id=target_chat, text=_lang["play_next"])
                     except errors.ChannelPrivate:
-                        logger.warning(
-                            f"Bot removed from {chat_id}, cleaning up")
+                        logger.warning(f"Bot removed from {chat_id}, cleaning up")
                         await self.leave_call(chat_id)
                         await db.rm_chat(chat_id)
                         return
                     except Exception as e:
-                        logger.error(
-                            f"Failed to send play_next message after FloodWait for {chat_id}: {e}")
-                        # Continue without message - don't let this stop playback
+                        logger.error(f"Failed to send play_next message after FloodWait for {chat_id}: {e}")
                         msg = None
                 except errors.ChannelPrivate:
                     logger.warning(f"Bot removed from {chat_id}, cleaning up")
@@ -776,8 +692,7 @@ class TgCall(PyTgCalls):
                     await db.rm_chat(chat_id)
                     return
                 except Exception as e:
-                    logger.error(
-                        f"Failed to send play_next message for {chat_id}: {e}")
+                    logger.error(f"Failed to send play_next message for {chat_id}: {e}")
                     msg = None
 
                 if not media.file_path:
@@ -788,34 +703,45 @@ class TgCall(PyTgCalls):
                         video=getattr(media, 'video', False),
                     )
                     if not media.file_path:
-                        await self.stop(chat_id)
+                        logger.warning(f"Download failed for {media.title} in {chat_id}, skipping to next...")
                         if msg:
                             try:
                                 await msg.edit_text(
-                                    _lang["error_no_file"].format(
-                                        config.SUPPORT_CHAT)
+                                    f"⚠️ Download failed for <b>{media.title}</b>, skipping...\n"
+                                    f"<blockquote>Support: {config.SUPPORT_CHAT}</blockquote>"
                                 )
                             except Exception:
                                 pass
-                        return
+                        # Lock ke andar hai, recursive nahi kar sakte
+                        # Directly next track fetch karke play karo
+                        media = queue.get_next(chat_id)
+                        if not media:
+                            return await self.stop(chat_id)
+                        if not media.file_path:
+                            is_live = getattr(media, 'is_live', False)
+                            media.file_path = await yt.download(
+                                media.id,
+                                is_live=is_live,
+                                video=getattr(media, 'video', False),
+                            )
+                        if not media.file_path:
+                            return await self.stop(chat_id)
+                        # Fall through to play_media below
 
                 media.message_id = msg.id if msg else 0
                 if msg:
                     await self.play_media(chat_id, msg, media, message_chat_id=message_chat_id)
                 else:
-                    logger.info(
-                        f"Playing next track for {chat_id} without message update")
+                    logger.info(f"Playing next track for {chat_id} without message update")
                     await self.play_media(chat_id, None, media, message_chat_id=message_chat_id)
 
                 try:
-                    asyncio.create_task(
-                        preload.start_preload(chat_id, count=2))
+                    asyncio.create_task(preload.start_preload(chat_id, count=2))
                 except Exception as e:
-                    logger.debug(
-                        f"Error starting preload after play_next for {chat_id}: {e}")
+                    logger.debug(f"Error starting preload after play_next for {chat_id}: {e}")
+
             except Exception as e:
-                logger.error(
-                    f"Error in play_next for {chat_id}: {e}", exc_info=True)
+                logger.error(f"Error in play_next for {chat_id}: {e}", exc_info=True)
                 try:
                     await self.stop(chat_id)
                 except Exception:
