@@ -157,7 +157,8 @@ class TgCall(PyTgCalls):
             if message:
                 return await message.edit_text(_lang["error_no_file"].format(config.SUPPORT_CHAT))
             else:
-                logger.error(f"No file path for media in {chat_id}")
+                logger.warning(f"[play_media] No file path for media '{getattr(media, 'title', '?')}' in {chat_id}, skipping to next...")
+                await self.play_next(chat_id)
                 return
 
         try:
